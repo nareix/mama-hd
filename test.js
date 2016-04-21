@@ -88,7 +88,7 @@ if (1) {
 		});
 
 		let localurl = 'http://localhost:8080/'
-		let useMine = false;
+		let useMine = true;
 
 		if (!useMine) {
 			fetch(localurl+'frag_bunny.mp4.fraginfo.json')
