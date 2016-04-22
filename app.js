@@ -239,121 +239,286 @@ class Streams {
 }
 
 app.Streams = Streams;
-
 app.fetchU8 = (url, opts) => app.fetchAB(url, opts).then(ab => new Uint8Array(ab))
 
-app.testmux = (flvhdr, segbuf) => {
-	let start = 4;
-	let end = 5;
-	let segpkts = flvdemux.parseMediaSegment(segbuf);
+let dbp = function() {
+	if (app.debug)
+		console.log.apply(console, arguments)
+}
 
-	let videoTrack = {
-		type: 'video',
-		id: 1,
-		duration: Math.ceil(flvhdr.meta.duration*mp4mux.timeScale),
-		width: flvhdr.meta.width,
-		height: flvhdr.meta.height,
-		AVCDecoderConfigurationRecord: flvhdr.firstv.AVCDecoderConfigurationRecord,
-		samples: [],
-		_mdatSize: 0,
-	};
-
-	let audioTrack = {
-		type: 'audio',
-		id: 2,
-		duration: videoTrack.duration,
-		channelcount: flvhdr.firsta.channelCount,
-		samplerate: flvhdr.firsta.sampleRate,
-		samplesize: flvhdr.firsta.sampleSize,
-		AudioSpecificConfig: flvhdr.firsta.AudioSpecificConfig,
-		samples: [],
-		_mdatSize: 0,
-	};
-
-	let firstDts, lastSample;
-	firstDts = segpkts[0].dts;
-
-	let emptySample = {
-		duration: 0,
-		size: 0,
-		compositionTimeOffset: 0,
-		flags: {
-			isLeading: 0,
-			dependsOn: 0,
-			isDependedOn: 0,
-			hasRedundancy: 0,
-			paddingValue: 0,
-			isNonSyncSample: 0,
-			degradationPriority: 0,
-		},
-	};
-
-	//videoTrack.samples.push(emptySample);
-	segpkts.filter(pkt => pkt.type == 'video' && pkt.NALUs).forEach((pkt, i) => {
-		let sample = {};
-		sample._data = pkt.NALUs;
-		sample._offset = videoTrack._mdatSize;
-		sample.size = sample._data.byteLength;
-		videoTrack._mdatSize += sample.size;
-
-		sample._dts = (pkt.dts-firstDts)*mp4mux.timeScale;
-		sample.compositionTimeOffset = pkt.cts*mp4mux.timeScale;
-		sample.flags = {
-			isLeading: 0,
-			dependsOn: 0,
-			isDependedOn: 0,
-			hasRedundancy: 0,
-			paddingValue: 0,
-			isNonSyncSample: i>0?1:0,
-			degradationPriority: 0,
+function debounce(func, wait, immediate) {
+	var timeout;
+	return function() {
+		var context = this, args = arguments;
+		var later = function() {
+			timeout = null;
+			if (!immediate) func.apply(context, args);
 		};
+		var callNow = immediate && !timeout;
+		clearTimeout(timeout);
+		timeout = setTimeout(later, wait);
+		if (callNow) func.apply(context, args);
+	};
+};
 
-		if (lastSample) {
-			lastSample.duration = sample._dts-lastSample._dts;
+app.parseTudou = url => {
+	return fetch(url).then(res => res.text())
+	.then(res => {
+		let iid = res.match(/iid\s*[:=]\s*(\S+)/);
+		if (!iid)
+			return;
+		iid = iid[1];
+		dbp('iid', iid)
+		return fetch(`http://www.tudou.com/outplay/goto/getItemSegs.action?iid=${iid}`).then(res => res.json())
+		.then(res => {
+			console.log(res);
+		})
+	})
+}
+
+app.parseBilibili = url => {
+	return fetch(url).then(res => res.text())
+	.then(res => {
+		let parser = new DOMParser();
+		let doc = parser.parseFromString(res, 'text/html');
+		let scripts = Array.prototype.slice.call(doc.querySelectorAll('script')).map(script => script.textContent);
+		let player = scripts.filter(x => x.match(/^EmbedPlayer/));
+		if (player[0]) {
+			let cid = player[0].match(/cid=(\d+)/);
+			if (cid)
+				return cid[1];
+			else
+				return;
 		}
-		lastSample = sample;
-		videoTrack.samples.push(sample);
-	});
-	videoTrack.baseMediaDecodeTime = 0;
+	}).then(cid => {
+		if (cid)
+			return fetch(`http://interface.bilibili.com/playurl?appkey=8e9fc618fbd41e28&cid=${cid}`).then(res => res.text())
+			.then(res => {
+				let parser = new DOMParser();
+				let doc = parser.parseFromString(res, 'text/xml');
+				console.log('bilibili', doc);
+				return Array.prototype.slice.call(doc.querySelectorAll('durl > url')).map(url => url.textContent)
+			})
+	})
+}
 
-	//audioTrack.samples.push(emptySample);
-	lastSample = null;
-	segpkts.filter(pkt => pkt.type == 'audio' && pkt.frame).forEach((pkt, i) => {
-		let sample = {};
-		sample._data = pkt.frame;
-		sample._offset = audioTrack._mdatSize;
-		sample.size = sample._data.byteLength;
+app.createVideo = urls => {
+	let video = document.createElement('video');
+	video.controls = true;
+	video.style.width = '1000px'
+	video.volume = 0.2;
 
-		audioTrack._mdatSize += sample.size;
-
-		sample._dts = (pkt.dts-firstDts)*mp4mux.timeScale;
-		if (lastSample) {
-			lastSample.duration = sample._dts-lastSample._dts;
+	if (false) {
+		let btn = document.createElement('button')
+		btn.innerHTML = '<<';
+		btn.onclick = () => {
+			video.currentTime = video.currentTime-1;
 		}
-		lastSample = sample;
-		audioTrack.samples.push(sample);
+		document.body.appendChild(btn)
+	}
+
+	let streams = new app.Streams(urls);
+
+	let mediaSource = new MediaSource();
+	let sourceBuffer;
+
+	let findTimeRange = (time, buffered) => {
+		for (let i = 0; i < buffered.length; i++) {
+			if (time >= buffered.start(i) && time < buffered.end(i)) {
+				return {start:buffered.start(i), end:buffered.end(i)};
+			}
+		}
+	}
+
+	// updateend: if currentTime not buffered set to nearby buffered start
+	// seeking: if currentTime nearest keyframe not buffered load media segment else set to it
+
+	video.src = URL.createObjectURL(mediaSource);
+	document.body.appendChild(video);
+
+	let needSeekToTime = null;
+
+	let prefetching = false;
+	let lastPrefetchId;
+	let prefetchMediaSegmentsByTime = (time, len) => {
+		len = len || 30.0;
+		dbp('prefetch', time, time+len);
+
+		prefetching = true;
+		lastPrefetchId = Math.random();
+		((id) => {
+			streams.fetchMediaSegmentsByTime(time, time+len).then(buf => {
+				if (lastPrefetchId == id) {
+					sourceBuffer.appendBuffer(buf)
+					prefetching = false;
+				}
+			})
+		})(lastPrefetchId);
+	}
+
+	let findNearestBufferedStartByTime = time => {
+		let minDiff = streams.duration, best;
+		let buffered = sourceBuffer.buffered;
+		for (let i = 0; i < buffered.length; i++) {
+			let val = buffered.start(i);
+			let diff = Math.abs(time - val);
+			if (diff < minDiff) {
+				minDiff = diff;
+				best = val;
+			}
+		}
+		return best;
+	}
+
+	let timeIsBuffered = time => {
+		let buffered = sourceBuffer.buffered;
+		for (let i = 0; i < buffered.length; i++) {
+			if (time > buffered.start(i) && time < buffered.end(i)) {
+				return true;
+			}
+		}
+	}
+
+	let indexIsBuffered = index => {
+		let timeStart = streams.keyframes[index].time, timeEnd;
+		for (let i = index; i < streams.keyframes.length; i++) {
+			timeEnd = streams.keyframes[i].time;
+			if (timeEnd > timeStart)
+				break;
+		}
+		let time = (timeStart+timeEnd)/2;
+		return timeIsBuffered(time);
+	}
+
+	let timeupdateCounter = 0;
+	video.addEventListener('timeupdate', () => {
+		timeupdateCounter++;
+		if (timeupdateCounter < 6)
+			return;
+		timeupdateCounter = 0;
+
+		let buffered = sourceBuffer.buffered;
+		if (buffered.length == 0)
+			return;
+
+		let time = video.currentTime + 15.0;
+		if (!timeIsBuffered(time) && !prefetching) {
+			let start = buffered.end(buffered.length-1);
+			prefetchMediaSegmentsByTime(start);
+		}
+
+		if (buffered.end(0) - buffered.start(0) > 120.0) {
+			let keep = 10.0;
+			if (!sourceBuffer.updating && video.currentTime > keep) 
+				sourceBuffer.remove(0, video.currentTime-keep);
+		}
 	});
-	audioTrack.baseMediaDecodeTime = 0;
 
-	let moov = mp4mux.initSegment([videoTrack, audioTrack]);
-	let moof, _mdat, mdat;
-	let list = [moov];
+	video.addEventListener('seeking', debounce(() => {
+		dbp('video seeking:', video.currentTime)
 
-	moof = mp4mux.moof(0, [videoTrack]);
-	_mdat = new Uint8Array(videoTrack._mdatSize);
-	videoTrack.samples.forEach(sample => _mdat.set(sample._data, sample._offset));
-	mdat = mp4mux.mdat(_mdat);
-	list = list.concat([moof, mdat]);
+		let index = streams.findNearestIndexByTime(video.currentTime);
+		let time = streams.keyframes[index].time;
+		if (indexIsBuffered(index)) {
+			if (video.currentTime < time || video.currentTime > time + 0.3) {
+				dbp('video seeking:', 'seek to buffered keyframe', time);
+				video.currentTime = time;
+			}
+		} else {
+			dbp('video seeking:', 'need load segment', time);
+			prefetchMediaSegmentsByTime(time);
+			sourceBuffer.remove(0, video.duration);
+			needSeekToTime = time;
+		}
+	}, 200))
 
-	moof = mp4mux.moof(0, [audioTrack]);
-	_mdat = new Uint8Array(audioTrack._mdatSize);
-	audioTrack.samples.forEach(sample => _mdat.set(sample._data, sample._offset));
-	mdat = mp4mux.mdat(_mdat);
-	list = list.concat([moof, mdat]);
+	mediaSource.addEventListener('sourceended', () => {
+		dbp('mediaSource: sourceended')
+	})
 
-	let file = concatUint8Array(list);
+	mediaSource.addEventListener('sourceclose', () => {
+		dbp('mediaSource: sourceclose')
+	})
 
-	return {file, audioTrack};
+	mediaSource.addEventListener('sourceopen', e => {
+		if (mediaSource.sourceBuffers.length > 0)
+			return;
+
+		sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
+
+		sourceBuffer.addEventListener('updatestart', () => {
+			dbp('sourceBuffer: updatestart')
+		});
+
+		sourceBuffer.addEventListener('update', () => {
+			dbp('sourceBuffer: update')
+		});
+
+		sourceBuffer.addEventListener('updateend', () => {
+			dbp('sourceBuffer: updateend')
+
+			let ranges = [];
+			let buffered = sourceBuffer.buffered;
+			for (let i = 0; i < buffered.length; i++) {
+				ranges.push([buffered.start(i), buffered.end(i)]);
+			}
+			dbp('sourceBuffer: buffered', JSON.stringify(ranges), 'currentTime', video.currentTime);
+
+			if (sourceBuffer.buffered.length > 0) {
+				let time = findNearestBufferedStartByTime(video.currentTime);
+				if (needSeekToTime !== null && Math.abs(needSeekToTime-time) < 1.0) {
+					dbp('sourceBuffer: seek to', time);
+					video.currentTime = time;
+					video.play();
+					needSeekToTime = null;
+				}
+			}
+		});
+
+		sourceBuffer.addEventListener('error', () => {
+			dbp('sourceBuffer: error')
+		});
+
+		sourceBuffer.addEventListener('abort', () => {
+			dbp('sourceBuffer: abort')
+		});
+
+		let localurl = 'http://localhost:8080/'
+		let useMine = true;
+
+		if (!useMine) {
+			fetch(localurl+'frag_bunny.mp4.fraginfo.json')
+			.then(res => res.json()).then(info => {
+				console.log(info);
+				app.fetchU8(localurl+'frag_bunny.mp4', {end:info.InitSegEnd})
+				.then(u8 => {
+					console.log('loaded InitSeg', u8.byteLength)
+					sourceBuffer.appendBuffer(u8);
+					let entries = info.Entries;
+					console.log(JSON.stringify(entries.slice(0,10)))
+					let loadSeg = n => app.fetchU8(
+						localurl+'frag_bunny.mp4', {start:entries[4*n].Start,end:entries[4*n+1].End})
+						.then(u8 => {
+							console.log('loaded', n);
+							sourceBuffer.appendBuffer(u8);
+						});
+					loadSeg(4).then(() => loadSeg(5)).then(() => loadSeg(8))
+				});
+			})
+
+		} else {
+			streams.probe().then(() => {
+				sourceBuffer.appendBuffer(streams.getInitSegment());
+				needSeekToTime = 0.0;
+				prefetchMediaSegmentsByTime(0.0);
+			})
+
+		}
+	});
+}
+
+app.testParseUrls = () => {
+	app.parseYoukuCode('XMTU0MzMxMTk1Ng==', res => console.log(res));
 }
 
 try {

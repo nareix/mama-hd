@@ -1,0 +1,16 @@
+{
+  "name": "My Reminder App",
+  "description": "A reminder app that syncs across Chrome browsers.",
+  "manifest_version": 2,
+  "minimum_chrome_version": "45",
+  "offline_enabled": true,
+  "version": "0.3",
+  "permissions": [
+	  "*://*/*"
+  ],
+
+  "browser_action": {
+    "default_title": "",
+    "default_icon": "icon.jpg"
+  }
+}
