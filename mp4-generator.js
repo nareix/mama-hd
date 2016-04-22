@@ -27,12 +27,13 @@ FLAGS.MOV_TRUN_SAMPLE_FLAGS          = 0x400
 FLAGS.MOV_TRUN_SAMPLE_CTS            = 0x800
 
 FLAGS.MOV_FRAG_SAMPLE_FLAG_DEGRADATION_PRIORITY_MASK = 0x0000ffff
-FLAGS.MOV_FRAG_SAMPLE_FLAG_IS_NON_SYNC               = 0x00010000
+
 FLAGS.MOV_FRAG_SAMPLE_FLAG_PADDING_MASK              = 0x000e0000
 FLAGS.MOV_FRAG_SAMPLE_FLAG_REDUNDANCY_MASK           = 0x00300000
 FLAGS.MOV_FRAG_SAMPLE_FLAG_DEPENDED_MASK             = 0x00c00000
 FLAGS.MOV_FRAG_SAMPLE_FLAG_DEPENDS_MASK              = 0x03000000
 
+FLAGS.MOV_FRAG_SAMPLE_FLAG_IS_NON_SYNC               = 0x00010000
 FLAGS.MOV_FRAG_SAMPLE_FLAG_DEPENDS_NO                = 0x02000000
 FLAGS.MOV_FRAG_SAMPLE_FLAG_DEPENDS_YES               = 0x01000000
 
@@ -281,12 +282,14 @@ mdhd = function(track) {
   // Use the sample rate from the track metadata, when it is
   // defined. The sample rate can be parsed out of an ADTS header, for
   // instance.
+	/*
   if (track.samplerate) {
     result[12] = (track.samplerate >>> 24) & 0xFF;
     result[13] = (track.samplerate >>> 16) & 0xFF;
     result[14] = (track.samplerate >>>  8) & 0xFF;
     result[15] = (track.samplerate)        & 0xFF;
   }
+ */
 
   return box(types.mdhd, result);
 };
@@ -401,11 +404,9 @@ sdtp = function(track) {
 
   // write the sample table
   for (i = 0; i < samples.length; i++) {
-    flags = samples[i].flags;
+    flags = samples[i].flags || 0;
 
-    bytes[i + 4] = (flags.dependsOn << 4) |
-      (flags.isDependedOn << 2) |
-      (flags.hasRedundancy);
+    bytes[i + 4] = (flags>>20)&0x3f;
   }
 
   return box(types.sdtp,
@@ -597,22 +598,39 @@ traf = function(track) {
 	// mine: video.flags=MOV_TFHD_STSD_ID|MOV_TFHD_DEFAULT_DURATION|MOV_TFHD_DEFAULT_SIZE|MOV_TFHD_DEFAULT_FLAGS
 	//       audio.flags=MOV_TFHD_STSD_ID|MOV_TFHD_DEFAULT_DURATION|MOV_TFHD_DEFAULT_SIZE|MOV_TFHD_DEFAULT_FLAGS
 
-  trackFragmentHeader = box(types.tfhd, new Uint8Array([
+	var flags = FLAGS.MOV_TFHD_DEFAULT_BASE_IS_MOOF;
+	var defaultFlags = 0;
+
+	if (track.type == 'video') {
+		flags |= FLAGS.MOV_TFHD_DEFAULT_FLAGS;
+		defaultFlags = FLAGS.MOV_FRAG_SAMPLE_FLAG_DEPENDS_YES|FLAGS.MOV_FRAG_SAMPLE_FLAG_IS_NON_SYNC;
+	}
+
+	var tfhdbytes = [
     0x00, // version 0
-    0x00, 0x00, 0x3a,
+    (flags & 0xFF0000) >> 16,
+    (flags & 0xFF00) >> 8,
+    (flags & 0xFF), // flags
     (track.id & 0xFF000000) >> 24,
     (track.id & 0xFF0000) >> 16,
     (track.id & 0xFF00) >> 8,
     (track.id & 0xFF), // track_ID
-    0x00, 0x00, 0x00, 0x01, // sample_description_index
-    0x00, 0x00, 0x00, 0x00, // default_sample_duration
-    0x00, 0x00, 0x00, 0x00, // default_sample_size
-    0x00, 0x00, 0x00, 0x00  // default_sample_flags
-  ]));
+	];
+	if (flags & FLAGS.MOV_TFHD_DEFAULT_FLAGS) {
+		tfhdbytes = tfhdbytes.concat([
+			(defaultFlags & 0xFF000000) >> 24,
+			(defaultFlags & 0xFF0000) >> 16,
+			(defaultFlags & 0xFF00) >> 8,
+			(defaultFlags & 0xFF),
+		])
+	}
+
+  trackFragmentHeader = box(types.tfhd, new Uint8Array(tfhdbytes));
 
   trackFragmentDecodeTime = box(types.tfdt, new Uint8Array([
-    0x00, // version 0
+    0x01, // version 0
     0x00, 0x00, 0x00, // flags
+    0x00, 0x00, 0x00, 0x00,
     // baseMediaDecodeTime
     (track.baseMediaDecodeTime >>> 24) & 0xFF,
     (track.baseMediaDecodeTime >>> 16) & 0xFF,
@@ -623,33 +641,19 @@ traf = function(track) {
   // the data offset specifies the number of bytes from the start of
   // the containing moof to the first payload byte of the associated
   // mdat
-  dataOffset = (32 + // tfhd
-                16 + // tfdt
+  dataOffset = (tfhdbytes.length+8+ // tfhd
+                20+ // tfdt
                 8 +  // traf header
                 16 + // mfhd
                 8 +  // moof header
                 8);  // mdat header
 
   // audio tracks require less metadata
-  if (track.type === 'audio') {
-    trackFragmentRun = trun(track, dataOffset);
-    return box(types.traf,
+   trackFragmentRun = trun(track, dataOffset);
+   return box(types.traf,
                trackFragmentHeader,
                trackFragmentDecodeTime,
                trackFragmentRun);
-  }
-
-  // video tracks should contain an independent and disposable samples
-  // box (sdtp)
-  // generate one and adjust offsets to match
-  sampleDependencyTable = sdtp(track);
-  trackFragmentRun = trun(track, sampleDependencyTable.length + dataOffset);
-
-  return box(types.traf,
-             trackFragmentHeader,
-             trackFragmentDecodeTime,
-             trackFragmentRun,
-             sampleDependencyTable);
 };
 
 /**
@@ -695,25 +699,17 @@ trex = function(track) {
   // duration is present for the first sample, it will be present for
   // all subsequent samples.
   // see ISO/IEC 14496-12:2012, Section 8.8.8.1
-  trunHeader = function(samples, offset) {
-    var durationPresent = 0, sizePresent = 0,
-        flagsPresent = 0, compositionTimeOffset = 0;
+  trunHeader = function(track, samples, offset) {
+    var flags = 0;
+		var firstSampleFlags = 0;
 
-    // trun flag constants
-    if (samples.length) {
-      if (samples[0].duration !== undefined) {
-        durationPresent = 0x1;
-      }
-      if (samples[0].size !== undefined) {
-        sizePresent = 0x2;
-      }
-      if (samples[0].flags !== undefined) {
-        flagsPresent = 0x4;
-      }
-      if (samples[0].compositionTimeOffset !== undefined) {
-        compositionTimeOffset = 0x8;
-      }
-    }
+		if (track.type == 'video') {
+			flags = FLAGS.MOV_TRUN_DATA_OFFSET|FLAGS.MOV_TRUN_FIRST_SAMPLE_FLAGS|
+							FLAGS.MOV_TRUN_SAMPLE_DURATION|FLAGS.MOV_TRUN_SAMPLE_SIZE|FLAGS.MOV_TRUN_SAMPLE_CTS;
+			firstSampleFlags = FLAGS.MOV_FRAG_SAMPLE_FLAG_DEPENDS_NO;
+		} else {
+			flags = FLAGS.MOV_TRUN_DATA_OFFSET|FLAGS.MOV_TRUN_SAMPLE_DURATION|FLAGS.MOV_TRUN_SAMPLE_SIZE;
+		}
 
 		// diff trun
 		// his:   video.flags=MOV_TRUN(DATA_OFFSET|FIRST_SAMPLE_FLAGS|DURATION|SIZE)
@@ -724,29 +720,42 @@ trex = function(track) {
 		// mine:  video.flags=DATA_OFFSET|SAMPLE_FLAGS|DURATION|SIZE
 		//        audio.flags=DATA_OFFSET|DURATION|SIZE
 
-    return [
+		var bytes = [
       0x00, // version 0
-      0x00,
-      durationPresent | sizePresent | flagsPresent | compositionTimeOffset,
-      0x01, // flags
+      (flags & 0xFF0000) >>> 16,
+      (flags & 0xFF00) >>> 8,
+      flags & 0xFF, // flags
+
       (samples.length & 0xFF000000) >>> 24,
       (samples.length & 0xFF0000) >>> 16,
       (samples.length & 0xFF00) >>> 8,
       samples.length & 0xFF, // sample_count
+
       (offset & 0xFF000000) >>> 24,
       (offset & 0xFF0000) >>> 16,
       (offset & 0xFF00) >>> 8,
       offset & 0xFF // data_offset
     ];
+
+		if (flags&FLAGS.MOV_TRUN_FIRST_SAMPLE_FLAGS) {
+			bytes = bytes.concat([
+				(firstSampleFlags & 0xFF000000) >> 24,
+				(firstSampleFlags & 0xFF0000) >> 16,
+				(firstSampleFlags & 0xFF00) >> 8,
+				(firstSampleFlags & 0xFF),
+			])
+		}
+
+		return bytes;
   };
 
   videoTrun = function(track, offset) {
     var bytes, samples, sample, i;
 
     samples = track.samples || [];
-    offset += 8 + 12 + (16 * samples.length);
+    offset += 8 + 16 + (12 * samples.length);
 
-    bytes = trunHeader(samples, offset);
+    bytes = trunHeader(track, samples, offset);
 
     for (i = 0; i < samples.length; i++) {
       sample = samples[i];
@@ -759,13 +768,6 @@ trex = function(track) {
         (sample.size & 0xFF0000) >>> 16,
         (sample.size & 0xFF00) >>> 8,
         sample.size & 0xFF, // sample_size
-        (sample.flags.isLeading << 2) | sample.flags.dependsOn,
-        (sample.flags.isDependedOn << 6) |
-          (sample.flags.hasRedundancy << 4) |
-          (sample.flags.paddingValue << 1) |
-          sample.flags.isNonSyncSample,
-        sample.flags.degradationPriority & 0xF0 << 8,
-        sample.flags.degradationPriority & 0x0F, // sample_flags
         (sample.compositionTimeOffset & 0xFF000000) >>> 24,
         (sample.compositionTimeOffset & 0xFF0000) >>> 16,
         (sample.compositionTimeOffset & 0xFF00) >>> 8,
@@ -781,7 +783,7 @@ trex = function(track) {
     samples = track.samples || [];
     offset += 8 + 12 + (8 * samples.length);
 
-    bytes = trunHeader(samples, offset);
+    bytes = trunHeader(track, samples, offset);
 
     for (i = 0; i < samples.length; i++) {
       sample = samples[i];

@@ -168,16 +168,6 @@ class Streams {
 			sample._dts = pkt.dts*mp4mux.timeScale;
 			sample.compositionTimeOffset = pkt.cts*mp4mux.timeScale;
 
-			sample.flags = {
-				isLeading: 0,
-				dependsOn: 0,
-				isDependedOn: 0,
-				hasRedundancy: 0,
-				paddingValue: 0,
-				isNonSyncSample: pkt.isKeyFrame?1:0,
-				degradationPriority: 0,
-			};
-
 			if (lastSample) {
 				lastSample.duration = sample._dts-lastSample._dts;
 				lastDuration = lastSample.duration
@@ -208,7 +198,7 @@ class Streams {
 			audioTrack.samples.push(sample);
 		});
 		lastSample.duration = lastDuration
-		
+
 		console.log('audio',audioTrack.samples.length, 'video',videoTrack.samples.length)
 		console.log('audioStart', audioTrack.baseMediaDecodeTime/mp4mux.timeScale)
 		console.log('videoStart', videoTrack.baseMediaDecodeTime/mp4mux.timeScale)
@@ -222,7 +212,7 @@ class Streams {
 		mdat = mp4mux.mdat(_mdat);
 		list = list.concat([moof, mdat]);
 
-		moof = mp4mux.moof(0, [audioTrack]);
+		moof = mp4mux.moof(this.moofSeq++, [audioTrack]);
 		_mdat = new Uint8Array(audioTrack._mdatSize);
 		audioTrack.samples.forEach(sample => _mdat.set(sample._data, sample._offset));
 		mdat = mp4mux.mdat(_mdat);
@@ -235,120 +225,6 @@ class Streams {
 app.Streams = Streams;
 
 app.fetchU8 = (url, opts) => app.fetchAB(url, opts).then(ab => new Uint8Array(ab))
-
-app.testmux = (flvhdr, segbuf) => {
-	let start = 4;
-	let end = 5;
-	let segpkts = flvdemux.parseMediaSegment(segbuf);
-
-	let videoTrack = {
-		type: 'video',
-		id: 1,
-		duration: Math.ceil(flvhdr.meta.duration*mp4mux.timeScale),
-		width: flvhdr.meta.width,
-		height: flvhdr.meta.height,
-		AVCDecoderConfigurationRecord: flvhdr.firstv.AVCDecoderConfigurationRecord,
-		samples: [],
-		_mdatSize: 0,
-	};
-
-	let audioTrack = {
-		type: 'audio',
-		id: 2,
-		duration: videoTrack.duration,
-		channelcount: flvhdr.firsta.channelCount,
-		samplerate: flvhdr.firsta.sampleRate,
-		samplesize: flvhdr.firsta.sampleSize,
-		AudioSpecificConfig: flvhdr.firsta.AudioSpecificConfig,
-		samples: [],
-		_mdatSize: 0,
-	};
-
-	let firstDts, lastSample;
-	firstDts = segpkts[0].dts;
-
-	let emptySample = {
-		duration: 0,
-		size: 0,
-		compositionTimeOffset: 0,
-		flags: {
-			isLeading: 0,
-			dependsOn: 0,
-			isDependedOn: 0,
-			hasRedundancy: 0,
-			paddingValue: 0,
-			isNonSyncSample: 0,
-			degradationPriority: 0,
-		},
-	};
-
-	//videoTrack.samples.push(emptySample);
-	segpkts.filter(pkt => pkt.type == 'video' && pkt.NALUs).forEach((pkt, i) => {
-		let sample = {};
-		sample._data = pkt.NALUs;
-		sample._offset = videoTrack._mdatSize;
-		sample.size = sample._data.byteLength;
-		videoTrack._mdatSize += sample.size;
-
-		sample._dts = (pkt.dts-firstDts)*mp4mux.timeScale;
-		sample.compositionTimeOffset = pkt.cts*mp4mux.timeScale;
-		sample.flags = {
-			isLeading: 0,
-			dependsOn: 0,
-			isDependedOn: 0,
-			hasRedundancy: 0,
-			paddingValue: 0,
-			isNonSyncSample: i>0?1:0,
-			degradationPriority: 0,
-		};
-
-		if (lastSample) {
-			lastSample.duration = sample._dts-lastSample._dts;
-		}
-		lastSample = sample;
-		videoTrack.samples.push(sample);
-	});
-	videoTrack.baseMediaDecodeTime = 0;
-
-	//audioTrack.samples.push(emptySample);
-	lastSample = null;
-	segpkts.filter(pkt => pkt.type == 'audio' && pkt.frame).forEach((pkt, i) => {
-		let sample = {};
-		sample._data = pkt.frame;
-		sample._offset = audioTrack._mdatSize;
-		sample.size = sample._data.byteLength;
-
-		audioTrack._mdatSize += sample.size;
-
-		sample._dts = (pkt.dts-firstDts)*mp4mux.timeScale;
-		if (lastSample) {
-			lastSample.duration = sample._dts-lastSample._dts;
-		}
-		lastSample = sample;
-		audioTrack.samples.push(sample);
-	});
-	audioTrack.baseMediaDecodeTime = 0;
-
-	let moov = mp4mux.initSegment([videoTrack, audioTrack]);
-	let moof, _mdat, mdat;
-	let list = [moov];
-
-	moof = mp4mux.moof(0, [videoTrack]);
-	_mdat = new Uint8Array(videoTrack._mdatSize);
-	videoTrack.samples.forEach(sample => _mdat.set(sample._data, sample._offset));
-	mdat = mp4mux.mdat(_mdat);
-	list = list.concat([moof, mdat]);
-
-	moof = mp4mux.moof(0, [audioTrack]);
-	_mdat = new Uint8Array(audioTrack._mdatSize);
-	audioTrack.samples.forEach(sample => _mdat.set(sample._data, sample._offset));
-	mdat = mp4mux.mdat(_mdat);
-	list = list.concat([moof, mdat]);
-
-	let file = concatUint8Array(list);
-
-	return {file, audioTrack};
-}
 
 try {
 	module.exports = app;
