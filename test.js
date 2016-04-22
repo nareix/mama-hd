@@ -1,6 +1,6 @@
 
 function fetchAB(url, cb) {
-	var xhr = new XMLHttpRequest;
+	let xhr = new XMLHttpRequest;
 	xhr.open('get', url);
 	xhr.responseType = 'arraybuffer';
 	xhr.onload = function () {
@@ -33,28 +33,113 @@ let dbp = function() {
 	console.log.apply(console, arguments)
 }
 
+function debounce(func, wait, immediate) {
+	var timeout;
+	return function() {
+		var context = this, args = arguments;
+		var later = function() {
+			timeout = null;
+			if (!immediate) func.apply(context, args);
+		};
+		var callNow = immediate && !timeout;
+		clearTimeout(timeout);
+		timeout = setTimeout(later, wait);
+		if (callNow) func.apply(context, args);
+	};
+};
+
 if (1) {
 	let video = document.createElement('video');
 	video.controls = true;
-	video.style.width = '800px'
+	video.style.width = '1000px'
+	video.volume = 0.2;
+
+	let urls = [];
+	for (let i = 0; i < 4; i++)
+		urls.push('http://localhost:8080/projectindex-'+i+'.flv');
+	let streams = new app.Streams(urls);
 
 	let mediaSource = new MediaSource();
+	let sourceBuffer;
+
+	let findTimeRange = (time, buffered) => {
+		for (let i = 0; i < buffered.length; i++) {
+			if (time >= buffered.start(i) && time < buffered.end(i)) {
+				return {start:buffered.start(i), end:buffered.end(i)};
+			}
+		}
+	}
+
+	// updateend: if currentTime not buffered set to nearby buffered start
+	// seeking: if currentTime nearest keyframe not buffered load media segment else set to it
+
 	video.src = URL.createObjectURL(mediaSource);
 	document.body.appendChild(video);
 
+	let prefetchMediaSegmentsByTime = (time) => {
+		streams.fetchMediaSegmentsByTime(time, time+20.0).then(buf => {
+			sourceBuffer.appendBuffer(buf)
+		})
+	}
+
+	let findNearestBufferedStartByTime = time => {
+		let minDiff = streams.duration, best;
+		let buffered = sourceBuffer.buffered;
+		for (let i = 0; i < buffered.length; i++) {
+			let val = buffered.start(i);
+			let diff = Math.abs(time - val);
+			if (diff < minDiff) {
+				minDiff = diff;
+				best = val;
+			}
+		}
+		return best;
+	}
+
+	let timeIsBuffered = time => {
+		let delta = 0.3;
+		let buffered = sourceBuffer.buffered;
+		for (let i = 0; i < buffered.length; i++) {
+			if (time > buffered.start(i)-delta && time < buffered.end(i)+delta) {
+				return true;
+			}
+		}
+	}
+
+	video.addEventListener('timeupdate', () => {
+		dbp('timeupdate:', video.currentTime);
+	});
+
+	video.addEventListener('seeking', debounce(() => {
+		dbp('seeking:', video.currentTime)
+
+		let index = streams.findNearestIndexByTime(video.currentTime);
+		let time = streams.keyframes[index].time;
+		if (timeIsBuffered(time)) {
+			if (Math.abs(video.currentTime-time) > 0.3) {
+				dbp('seeking:', 'to nearest keyframe', time);
+				video.currentTime = time;
+			}
+		} else {
+			dbp('seeking:', 'load segment', time);
+			video.currentTime = time;
+			prefetchMediaSegmentsByTime(time);
+		}
+	}, 200))
+
 	mediaSource.addEventListener('sourceended', () => {
-		console.log('mediaSource: sourceended')
+		dbp('mediaSource: sourceended')
 	})
 
 	mediaSource.addEventListener('sourceclose', () => {
-		console.log('mediaSource: sourceclose')
+		dbp('mediaSource: sourceclose')
 	})
 
-	mediaSource.addEventListener('sourceopen', () => {
+	mediaSource.addEventListener('sourceopen', e => {
 		if (mediaSource.sourceBuffers.length > 0)
 			return;
 
-		let sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
+		sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
 
 		sourceBuffer.addEventListener('updatestart', () => {
 			dbp('sourceBuffer: updatestart')
@@ -66,17 +151,20 @@ if (1) {
 
 		sourceBuffer.addEventListener('updateend', () => {
 			dbp('sourceBuffer: updateend')
-			var ranges = [];
-			var buffered = sourceBuffer.buffered;
-			for (var i = 0; i < buffered.length; i++) {
+
+			let ranges = [];
+			let buffered = sourceBuffer.buffered;
+			for (let i = 0; i < buffered.length; i++) {
 				ranges.push([buffered.start(i), buffered.end(i)]);
 			}
-			if (ranges.length > 0) {
-				video.currentTime = ranges[0][0];
-				video.volume = 0.3;
+			dbp('sourceBuffer: buffered', JSON.stringify(ranges), 'currentTime', video.currentTime);
+
+			if (sourceBuffer.buffered.length > 0) {
+				let time = findNearestBufferedStartByTime(video.currentTime);
+				dbp('sourceBuffer: seek to', time);
+				video.currentTime = time;
 				video.play();
 			}
-			console.log('sourceBuffer: buffered', JSON.stringify(ranges));
 		});
 
 		sourceBuffer.addEventListener('error', () => {
@@ -111,15 +199,11 @@ if (1) {
 			})
 
 		} else {
-			let urls = [];
-			for (let i = 0; i < 4; i++)
-			urls.push('http://localhost:8080/projectindex-'+i+'.flv');
-			let streams = new app.Streams(urls);
 			streams.probe().then(() => {
 				sourceBuffer.appendBuffer(streams.getInitSegment())
-				let start = streams.streams[1].timeStart;
-				//let start = 10;
-				streams.fetchMediaSegments(start-10, start+10).then(buf => {
+				let start = streams.streams[3].indexStart;
+				dbp(streams.keyframes.length, start)
+				streams.fetchMediaSegmentsByIndex(start-5, start+5).then(buf => {
 					sourceBuffer.appendBuffer(buf)
 				})
 			})
