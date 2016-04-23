@@ -17,12 +17,14 @@ function jsonp (url, callback, callbackKey) {
   callbackKey = callbackKey || 'callback'
 
   var _callbackHandle = callbackHandle()  
+	var script;
 
   window[_callbackHandle] = function (rs) {
     clearTimeout(timeoutTimer)
     window[_callbackHandle] = noop
     callback(rs)
-    document.body.removeChild(script)
+		if (script)
+			document.body.removeChild(script)
   }
 
   var timeoutTimer = setTimeout(function () {
@@ -35,7 +37,7 @@ function jsonp (url, callback, callbackKey) {
 			eval(res)
 		})
 	} else {
-		var script = createElement('script', {
+		script = createElement('script', {
 			appendTo: document.body,
 			src: src,
 		})

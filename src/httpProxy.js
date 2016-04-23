@@ -18,24 +18,29 @@ var queryString   = require('./queryString')
 
 var proxyUrl = 'http://zythum.sinaapp.com/mama2/proxy.php'
 
-function httpProxy (url, type, params, callback, opts) {
-  opts = opts || {}
-  ajax({
-    url: proxyUrl,
-    param : {
-      params: encodeURIComponent(queryString(params)),//上行参数
-      referrer: encodeURIComponent((opts.referrer || location.href).split('#')[0]),
-      url: encodeURIComponent(url.split('#')[0]),
-      post: type === 'post' ? 1 : 0,
-      xml: opts.xml ? 1 : 0,
-      text: opts.text ? 1 : 0,
-      gzinflate: opts.gzinflate ? 1 : 0,
-      ua: encodeURIComponent(opts.ua || navigator.userAgent)
-    },
-    jsonp: true,
-    callback: callback,
-    context: opts.context
-  })
+if (window.IsInChromeExtension) {
+	function httpProxy (url, type, params, callback, opts) {
+	}
+} else {
+	function httpProxy (url, type, params, callback, opts) {
+		opts = opts || {}
+		ajax({
+			url: proxyUrl,
+			param : {
+				params: encodeURIComponent(queryString(params)),//上行参数
+				referrer: encodeURIComponent((opts.referrer || location.href).split('#')[0]),
+				url: encodeURIComponent(url.split('#')[0]),
+				post: type === 'post' ? 1 : 0,
+				xml: opts.xml ? 1 : 0,
+				text: opts.text ? 1 : 0,
+				gzinflate: opts.gzinflate ? 1 : 0,
+				ua: encodeURIComponent(opts.ua || navigator.userAgent)
+			},
+			jsonp: true,
+			callback: callback,
+			context: opts.context
+		})
+	}
 }
 
 module.exports = httpProxy

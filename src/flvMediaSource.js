@@ -136,7 +136,10 @@ class Streams {
 		let fetch = i => {
 			let range = ranges[i];
 			return app.fetchU8(range.url, {start:range.start, end:range.end}).then(segbuf => {
+				let cputimeStart = new Date().getTime();
 				let buf = this._transMediaSegments(segbuf, this.streams[range.s].timeStart);
+				let cputimeEnd = new Date().getTime();
+				dbp('_transMediaSegments time(ms):', (cputimeEnd-cputimeStart), 'videotime(s)')
 				resbuf.push(buf);
 				if (i+1 < ranges.length)
 					return fetch(i+1);
@@ -347,7 +350,7 @@ app.bindVideo = (video, urls) => {
 		if (buffered.length == 0)
 			return;
 
-		let time = video.currentTime + 10.0;
+		let time = video.currentTime + 20.0;
 		if (!timeIsBuffered(time) && !prefetching) {
 			let start = buffered.end(buffered.length-1);
 			prefetchMediaSegmentsByTime(start);
