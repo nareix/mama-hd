@@ -99,19 +99,21 @@ function seeked (source, comments) {
     delete window[mamaKey]
   }
 
-	var player;
 	if (window.IsInChromeExtension && typeof(source[0][1]) == 'object') {
-		player = new MAMAPlayer('MAMA2_video_placeHolder', '1000x500', [[source[0][0], 'about:blank']], comments)
-		setTimeout(function(){
-			window.flvMediaSource.bindVideo(player.video, source[0][1])
-		}, 0);
+		var video = document.createElement('video');
+		var div = document.getElementById('MAMA2_video_placeHolder');
+		video.style.width = '1000px';
+		div.appendChild(video);
+		video.controls = true;
+		video.style.zIndex = 10000;
+		window.flvMediaSource.bindVideo(video, source[0][1])
 	} else {
-  	player = new MAMAPlayer('MAMA2_video_placeHolder', '1000x500', source, comments)
+  	var player = new MAMAPlayer('MAMA2_video_placeHolder', '1000x500', source, comments)
+		player.iframe.contentWindow.focus()
+		flashBlocker()
+		player.iframe.style.display = 'block'
 	}
 
-  player.iframe.contentWindow.focus()
-  flashBlocker()
-  player.iframe.style.display = 'block'
   window[mamaKey] = true
 }
 

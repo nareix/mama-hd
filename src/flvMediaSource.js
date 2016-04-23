@@ -48,7 +48,7 @@ class Streams {
 
 	probe() {
 		return Promise.all(this.urls.map((url, i) => {
-			return app.fetchU8(url, {end:1024*400}).then(u8 => {
+			return app.fetchU8(url, {end:1024*500}).then(u8 => {
 				let hdr = flvdemux.parseInitSegment(u8);
 				if (hdr == null)
 					return Promise.reject(new Error('probe '+url+' failed'));

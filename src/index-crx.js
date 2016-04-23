@@ -20,3 +20,5 @@ window.flvMediaSource.fetchAB = (url, _opts) => {
 	return fetch(url, opts).then(res => res.arrayBuffer());
 }
 require('./index');
+
+
