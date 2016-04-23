@@ -10,23 +10,50 @@ function pad(num, n) {
   return (Array(n).join(0) + num).slice(-n)
 }
 
+function getFlvUrls(url, cb) {
+	return fetch(url.attr('source')).then(function(res) { return res.text() }).then(res => {
+		var parser = new DOMParser();
+		var doc = parser.parseFromString(res, 'text/html');
+		var scripts = Array.prototype.slice.call(doc.querySelectorAll('script')).map(function(script) {return script.textContent});
+		var player = scripts.filter(function(x) {return x.match(/^EmbedPlayer/)});
+		if (player[0]) {
+			var cid = player[0].match(/cid=(\d+)/);
+			if (cid) 
+				return cid[1];
+		}
+	}).then(function(cid) {
+		if (!cid)
+			return;
+		return fetch("http://interface.bilibili.com/playurl?appkey=8e9fc618fbd41e28&cid="+cid).then(function(res) { return res.text() }).then(res => {
+			var parser = new DOMParser();
+			var doc = parser.parseFromString(res, 'text/xml');
+			var src = Array.prototype.slice.call(doc.querySelectorAll('durl > url')).map(function(url){ return url.textContent });
+			return {
+				src: src,
+				cid: 'http://comment.bilibili.com/'+cid+'.xml',
+			}
+		})
+	}).then(cb).catch(function(){cb()})
+}
+
+function getH5Urls(url, cb) {
+  var aid = url.attr('directory').match(/^\/video\/av(\d+)\/$/)[1]
+  var page = (function () {
+    pageMatch = url.attr('file').match(/^index\_(\d+)\.html$/)
+    return pageMatch ? pageMatch[1] : 1
+  }())
+  httpProxy('http://www.bilibili.com/m/html5', 'get', {aid: aid, page: page, sid: getCookie('sid')}, cb)
+}
+
 exports.match = function (url) {
   return url.attr('host').indexOf('bilibili') >= 0 && /^\/video\/av\d+\/$/.test(url.attr('directory'))
 }
 
 exports.getVideos = function (url, callback) {
   log('开始解析bilibli视频地址')
-  var aid = url.attr('directory').match(/^\/video\/av(\d+)\/$/)[1]
-  var page = (function () {
-    pageMatch = url.attr('file').match(/^index\_(\d+)\.html$/)
-    return pageMatch ? pageMatch[1] : 1
-  }())
-  
-  httpProxy(
-    'http://www.bilibili.com/m/html5', 
-    'get', 
-    {aid: aid, page: page, sid: getCookie('sid')},
-  function (rs) {
+	var getsrc = window.IsInChromeExtension ? getFlvUrls : getH5Urls;
+
+	getsrc(url, function (rs) {
     if (rs && rs.src) {
       log('获取到<a href="'+rs.src+'">视频地址</a>, 并开始解析bilibli弹幕')
       var source = [ ['bilibili', rs.src] ]

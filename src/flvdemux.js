@@ -249,11 +249,5 @@ let parseInitSegment = uint8arr => {
 	}
 }
 
-var flvdemux = {parseInitSegment, parseMediaSegment};
-
-try {
-	module.exports = flvdemux;
-	global.flvdemux = flvdemux;
-} catch(e) {
-}
+module.exports = {parseInitSegment, parseMediaSegment};
 

@@ -808,7 +808,7 @@ trex = function(track) {
   };
 })();
 
-var mp4mux = {
+module.exports = {
 	FLAGS: FLAGS,
   ftyp: ftyp,
   mdat: mdat,
@@ -827,10 +827,4 @@ var mp4mux = {
     return result;
   }
 };
-
-try {
-	module.exports = mp4mux;
-	global.mp4mux = mp4mux;
-} catch(e) {
-}
 

@@ -1,6 +1,16 @@
 
 'use strict'
 
+let flvdemux = require('./flvdemux')
+let mp4mux = require('./mp4mux')
+
+let app = {}
+
+let dbp = function() {
+	if (app.debug)
+		console.log.apply(console, arguments)
+}
+
 let concatUint8Array = function(list) {
 	let len = 0;
 	list.forEach(b => len += b.byteLength)
@@ -12,8 +22,6 @@ let concatUint8Array = function(list) {
 	})
 	return res;
 }
-
-var app = {};
 
 let ADTS_SAMPLING_FREQUENCIES = [
 	96000,
@@ -238,13 +246,7 @@ class Streams {
 	}
 }
 
-app.Streams = Streams;
 app.fetchU8 = (url, opts) => app.fetchAB(url, opts).then(ab => new Uint8Array(ab))
-
-let dbp = function() {
-	if (app.debug)
-		console.log.apply(console, arguments)
-}
 
 function debounce(func, wait, immediate) {
 	var timeout;
@@ -261,63 +263,8 @@ function debounce(func, wait, immediate) {
 	};
 };
 
-app.parseTudou = url => {
-	return fetch(url).then(res => res.text())
-	.then(res => {
-		let iid = res.match(/iid\s*[:=]\s*(\S+)/);
-		if (!iid)
-			return;
-		iid = iid[1];
-		dbp('iid', iid)
-		return fetch(`http://www.tudou.com/outplay/goto/getItemSegs.action?iid=${iid}`).then(res => res.json())
-		.then(res => {
-			console.log(res);
-		})
-	})
-}
-
-app.parseBilibili = url => {
-	return fetch(url).then(res => res.text())
-	.then(res => {
-		let parser = new DOMParser();
-		let doc = parser.parseFromString(res, 'text/html');
-		let scripts = Array.prototype.slice.call(doc.querySelectorAll('script')).map(script => script.textContent);
-		let player = scripts.filter(x => x.match(/^EmbedPlayer/));
-		if (player[0]) {
-			let cid = player[0].match(/cid=(\d+)/);
-			if (cid)
-				return cid[1];
-			else
-				return;
-		}
-	}).then(cid => {
-		if (cid)
-			return fetch(`http://interface.bilibili.com/playurl?appkey=8e9fc618fbd41e28&cid=${cid}`).then(res => res.text())
-			.then(res => {
-				let parser = new DOMParser();
-				let doc = parser.parseFromString(res, 'text/xml');
-				console.log('bilibili', doc);
-				return Array.prototype.slice.call(doc.querySelectorAll('durl > url')).map(url => url.textContent)
-			})
-	})
-}
-
-app.createVideo = urls => {
-	let video = document.createElement('video');
-	video.controls = true;
-	video.style.width = '1000px'
-	video.volume = 0.2;
-
-	if (false) {
-		let btn = document.createElement('button')
-		btn.innerHTML = '<<';
-		btn.onclick = () => {
-			video.currentTime = video.currentTime-1;
-		}
-		document.body.appendChild(btn)
-	}
-
-	let streams = new app.Streams(urls);
+app.bindVideo = (video, urls) => {
+	let streams = new Streams(urls);
 
 	let mediaSource = new MediaSource();
 	let sourceBuffer;
@@ -334,14 +281,13 @@ app.createVideo = urls => {
 	// seeking: if currentTime nearest keyframe not buffered load media segment else set to it
 
 	video.src = URL.createObjectURL(mediaSource);
-	document.body.appendChild(video);
 
 	let needSeekToTime = null;
 
 	let prefetching = false;
 	let lastPrefetchId;
 	let prefetchMediaSegmentsByTime = (time, len) => {
-		len = len || 30.0;
+		len = len || 10.0;
 		dbp('prefetch', time, time+len);
 
 		prefetching = true;
@@ -401,7 +347,7 @@ app.createVideo = urls => {
 		if (buffered.length == 0)
 			return;
 
-		let time = video.currentTime + 15.0;
+		let time = video.currentTime + 10.0;
 		if (!timeIsBuffered(time) && !prefetching) {
 			let start = buffered.end(buffered.length-1);
 			prefetchMediaSegmentsByTime(start);
@@ -517,13 +463,5 @@ app.createVideo = urls => {
 	});
 }
 
-app.testParseUrls = () => {
-	app.parseYoukuCode('XMTU0MzMxMTk1Ng==', res => console.log(res));
-}
-
-try {
-	module.exports = app;
-	global.app = app;
-} catch (e) {
-}
+module.exports = app;
 

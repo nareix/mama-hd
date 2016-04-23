@@ -1,5 +1,7 @@
-
-app.fetchAB = (url, _opts) => {
+window.IsInChromeExtension = true;
+window.flvMediaSource = require('./flvMediaSource');
+window.flvMediaSource.debug = true;
+window.flvMediaSource.fetchAB = (url, _opts) => {
 	let range;
 	let opts = {};
 	if (_opts.start || _opts.end) {
@@ -12,12 +14,9 @@ app.fetchAB = (url, _opts) => {
 		if (_opts.end)
 			range += _opts.end-1;
 	}
-
 	if (range !== undefined) {
 		opts.headers = {Range: range}
 	}
 	return fetch(url, opts).then(res => res.arrayBuffer());
 }
-
-app.debug = true;
-app.testParseUrls()
+require('./index');

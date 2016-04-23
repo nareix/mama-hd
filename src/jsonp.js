@@ -17,20 +17,29 @@ function jsonp (url, callback, callbackKey) {
   callbackKey = callbackKey || 'callback'
 
   var _callbackHandle = callbackHandle()  
+
   window[_callbackHandle] = function (rs) {
     clearTimeout(timeoutTimer)
     window[_callbackHandle] = noop
     callback(rs)
     document.body.removeChild(script)
   }
+
   var timeoutTimer = setTimeout(function () {
     window[_callbackHandle](-1)
   }, timeoutDelay)
 
-  var script = createElement('script', {
-    appendTo: document.body,
-    src: url + (url.indexOf('?') >= 0 ? '&' : '?') + callbackKey + '=' + _callbackHandle
-  })
+	var src = url + (url.indexOf('?') >= 0 ? '&' : '?') + callbackKey + '=' + _callbackHandle;
+	if (window.IsInChromeExtension) {
+		fetch(src).then(res => res.text()).then(res => {
+			eval(res)
+		})
+	} else {
+		var script = createElement('script', {
+			appendTo: document.body,
+			src: src,
+		})
+	}
 }
 
 module.exports = jsonp

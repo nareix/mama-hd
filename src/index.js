@@ -6,7 +6,8 @@ var purl          = require('./purl')
 var mamaKey       = require('./mamaKey')
 var seekers       = require('./seekers')
 var flvsp         = require('./seeker_flvsp');
-var matched
+
+var matched;
 
 if (window[mamaKey] != true) {
 
@@ -97,7 +98,17 @@ function seeked (source, comments) {
     player.video.src = 'about:blank'
     delete window[mamaKey]
   }
-  var player = new MAMAPlayer('MAMA2_video_placeHolder', '1000x500', source, comments)
+
+	var player;
+	if (window.IsInChromeExtension && typeof(source[0][1]) == 'object') {
+		player = new MAMAPlayer('MAMA2_video_placeHolder', '1000x500', [[source[0][0], 'about:blank']], comments)
+		setTimeout(function(){
+			window.flvMediaSource.bindVideo(player.video, source[0][1])
+		}, 0);
+	} else {
+  	player = new MAMAPlayer('MAMA2_video_placeHolder', '1000x500', source, comments)
+	}
+
   player.iframe.contentWindow.focus()
   flashBlocker()
   player.iframe.style.display = 'block'

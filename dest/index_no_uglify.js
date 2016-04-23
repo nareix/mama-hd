@@ -7,7 +7,8 @@ var purl          = require('./purl')
 var mamaKey       = require('./mamaKey')
 var seekers       = require('./seekers')
 var flvsp         = require('./seeker_flvsp');
-var matched
+
+var matched;
 
 if (window[mamaKey] != true) {
 
@@ -126,6 +127,7 @@ if (matched === undefined) {
 }
 
 }
+
 },{"./createElement":4,"./flashBlocker":5,"./log":10,"./mamaKey":11,"./player":13,"./purl":14,"./seeker_flvsp":19,"./seekers":24}],2:[function(require,module,exports){
 /*  \uff03function ajax#
  *  < {
