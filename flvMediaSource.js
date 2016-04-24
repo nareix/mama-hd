@@ -23,6 +23,25 @@ let concatUint8Array = function(list) {
 	return res;
 }
 
+app.fetchAB = (url, _opts) => {
+	let range;
+	let opts = {};
+	if (_opts.start || _opts.end) {
+		range = 'bytes=';
+		if (_opts.start)
+			range += _opts.start;
+		else
+			range += '0';
+		range += '-'
+		if (_opts.end)
+			range += _opts.end-1;
+	}
+	if (range !== undefined) {
+		opts.headers = {Range: range}
+	}
+	return fetch(url, opts).then(res => res.arrayBuffer());
+}
+
 let ADTS_SAMPLING_FREQUENCIES = [
 	96000,
 	88200,
@@ -225,7 +244,7 @@ class Streams {
 			audioTrack.samples.push(sample);
 		});
 		lastSample.duration = lastDuration
-		
+
 		//console.log('audio',audioTrack.samples.length, 'video',videoTrack.samples.length)
 		//console.log('audioStart', audioTrack.baseMediaDecodeTime/mp4mux.timeScale)
 		//console.log('videoStart', videoTrack.baseMediaDecodeTime/mp4mux.timeScale)
@@ -271,14 +290,6 @@ app.bindVideo = (video, urls) => {
 
 	let mediaSource = new MediaSource();
 	let sourceBuffer;
-
-	let findTimeRange = (time, buffered) => {
-		for (let i = 0; i < buffered.length; i++) {
-			if (time >= buffered.start(i) && time < buffered.end(i)) {
-				return {start:buffered.start(i), end:buffered.end(i)};
-			}
-		}
-	}
 
 	// updateend: if currentTime not buffered set to nearby buffered start
 	// seeking: if currentTime nearest keyframe not buffered load media segment else set to it
@@ -350,7 +361,7 @@ app.bindVideo = (video, urls) => {
 		if (buffered.length == 0)
 			return;
 
-		let time = video.currentTime + 20.0;
+		let time = video.currentTime + 60.0;
 		if (!timeIsBuffered(time) && !prefetching) {
 			let start = buffered.end(buffered.length-1);
 			prefetchMediaSegmentsByTime(start);
@@ -396,15 +407,15 @@ app.bindVideo = (video, urls) => {
 		sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
 
 		sourceBuffer.addEventListener('updatestart', () => {
-			dbp('sourceBuffer: updatestart')
+			//dbp('sourceBuffer: updatestart')
 		});
 
 		sourceBuffer.addEventListener('update', () => {
-			dbp('sourceBuffer: update')
+			//dbp('sourceBuffer: update')
 		});
 
 		sourceBuffer.addEventListener('updateend', () => {
-			dbp('sourceBuffer: updateend')
+			//dbp('sourceBuffer: updateend')
 
 			let ranges = [];
 			let buffered = sourceBuffer.buffered;
@@ -432,38 +443,15 @@ app.bindVideo = (video, urls) => {
 			dbp('sourceBuffer: abort')
 		});
 
-		let localurl = 'http://localhost:8080/'
-		let useMine = true;
+		streams.probe().then(() => {
+			sourceBuffer.appendBuffer(streams.getInitSegment());
+			needSeekToTime = 0.0;
+			prefetchMediaSegmentsByTime(0.0);
+		})
 
-		if (!useMine) {
-			fetch(localurl+'frag_bunny.mp4.fraginfo.json')
-			.then(res => res.json()).then(info => {
-				console.log(info);
-				app.fetchU8(localurl+'frag_bunny.mp4', {end:info.InitSegEnd})
-				.then(u8 => {
-					console.log('loaded InitSeg', u8.byteLength)
-					sourceBuffer.appendBuffer(u8);
-					let entries = info.Entries;
-					console.log(JSON.stringify(entries.slice(0,10)))
-					let loadSeg = n => app.fetchU8(
-						localurl+'frag_bunny.mp4', {start:entries[4*n].Start,end:entries[4*n+1].End})
-						.then(u8 => {
-							console.log('loaded', n);
-							sourceBuffer.appendBuffer(u8);
-						});
-					loadSeg(4).then(() => loadSeg(5)).then(() => loadSeg(8))
-				});
-			})
-
-		} else {
-			streams.probe().then(() => {
-				sourceBuffer.appendBuffer(streams.getInitSegment());
-				needSeekToTime = 0.0;
-				prefetchMediaSegmentsByTime(0.0);
-			})
-
-		}
 	});
+
+	return streams;
 }
 
 module.exports = app;

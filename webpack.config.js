@@ -1,8 +1,8 @@
 module.exports = {
-	entry: "./src/index-crx.js",
+	entry: "./index.js",
 	output: {
 		path: __dirname,
-		filename: "./extension/mama2.crx/bundle.js"
+		filename: "./bundle.js"
 	},
 	module: {
 		loaders: [
