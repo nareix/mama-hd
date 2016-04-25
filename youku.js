@@ -5,8 +5,6 @@
 'use strict'
 
 var querystring = require('querystring');
-var canPlayM3U8 = false
-var jsonp = require('./jsonp')
 
 exports.testUrl = function (url) {
   return url.match(/v\.youku\.com/)
@@ -78,7 +76,7 @@ var extractFlvPath = exports.extractFlvPath = function(info) {
 
 	return Promise.all(urls.map(url => fetch(url).then(res => res.json()).then(r => r[0].server)))
 		.then(urls => {
-			return {src: urls};
+			return {src: urls, duration: stream.milliseconds_video/1000.0};
 		});
 }
 

@@ -13,8 +13,12 @@ module.exports.getVideos = function (url) {
 		.then(res => res.text()).then(res => {
 			var parser = new DOMParser();
 			var doc = parser.parseFromString(res, 'text/xml');
-			var src = Array.prototype.slice.call(doc.querySelectorAll('durl > url')).map(url => url.textContent );
+			var array = x => Array.prototype.slice.call(x);
+			var duration = 0.0;
+			array(doc.querySelectorAll('durl > length')).forEach(len => duration += +len.textContent);
+			var src = array(doc.querySelectorAll('durl > url')).map(url => url.textContent );
 			return {
+				duration: duration/1000.0,
 				src: src,
 				commentUrl: 'http://comment.bilibili.com/'+cid+'.xml',
 			}
