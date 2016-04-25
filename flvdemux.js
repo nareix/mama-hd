@@ -144,9 +144,10 @@ let parseScriptData = uint8arr => {
 let parseVideoPacket = (uint8arr, dts) => {
 	let br = new ByteReader(uint8arr);
 	let flags = br.readBEUint(1);
-	let frameType = (flags&0xf)>>4;
+	let frameType = (flags>>4)&0xf;
 	let codecId = flags&0xf;
 	let pkt = {type:'video', dts:dts/1e3};
+
 	if (codecId == 7) { // h264
 		let type = br.readBEUint(1);
 		let cts = br.readBEInt(3);
@@ -156,9 +157,11 @@ let parseVideoPacket = (uint8arr, dts) => {
 			// AVCDecoderConfigurationRecord
 			pkt.AVCDecoderConfigurationRecord = br.readBuf(br.len());
 		} else if (type == 1) {
+			// NALUs
 			pkt.NALUs = br.readBuf(br.len());
 			pkt.isKeyFrame = frameType==1;
-			// NALUs
+		} else if (type == 2) {
+			throw new Error('type=2');
 		}
 	}
 	return pkt;
@@ -205,6 +208,9 @@ let parseMediaSegment = uint8arr => {
 		case TAG_AUDIO:
 			packets.push(parseAudioPacket(data, dts));
 			break;
+
+		default:
+			throw new Error(`unknown tag=${tagType}`);
 		}
 
 		br.skip(4);
