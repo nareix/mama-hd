@@ -112,48 +112,6 @@ class Streams {
 		});
 	}
 
-	probe() {
-		return Promise.all(this.urls.map((url, i) => {
-			return app.fetchU8(url, {end:1024*500}).then(u8 => {
-				let hdr = flvdemux.parseInitSegment(u8);
-				if (hdr == null)
-					return Promise.reject(new Error('probe '+url+' failed'));
-
-				this.streams[i] = hdr;
-			})
-		})).then(() => {
-			this.duration = 0;
-			this.keyframes = [];
-			this.streams.forEach((stream, s) => {
-				stream.duration = stream.meta.duration;
-				stream.timeStart = this.duration;
-				stream.indexStart = this.keyframes.length;
-				this.duration += stream.duration;
-				stream.meta.keyframes.times.forEach((time, i) => this.keyframes.push({time:time+stream.timeStart, s, i}));
-			})
-			this.keyframes.push({time:this.duration, s:this.streams.length, i:0});
-
-			let flvhdr = this.streams[0];
-			this.videoTrack = {
-				type: 'video',
-				id: 1,
-				duration: Math.ceil(this.duration*mp4mux.timeScale),
-				width: flvhdr.meta.width,
-				height: flvhdr.meta.height,
-				AVCDecoderConfigurationRecord: flvhdr.firstv.AVCDecoderConfigurationRecord,
-			};
-			this.audioTrack = {
-				type: 'audio',
-				id: 2,
-				duration: this.videoTrack.duration,
-				channelcount: flvhdr.firsta.channelCount,
-				samplerate: flvhdr.firsta.sampleRate,
-				samplesize: flvhdr.firsta.sampleSize,
-				AudioSpecificConfig: flvhdr.firsta.AudioSpecificConfig,
-			};
-		})
-	}
-
 	_locateSegmentRangesByIndex(indexStart, indexEnd) {
 		let start = this.keyframes[indexStart];
 		let end = this.keyframes[indexEnd];
@@ -204,30 +162,79 @@ class Streams {
 
 	fetchMediaSegmentsByIndex(indexStart, indexEnd) {
 		let ranges = this._getFetchRangesByIndex(indexStart, indexEnd);
+		if (ranges.length == 0)
+			throw new Error('empty range, maybe video end');
+
 		{
 			let ts = this.keyframes[indexStart].time;
 			let te = this.keyframes[indexEnd].time;
 			dbp('fetch:', `index=[${indexStart},${indexEnd}] time=[${ts},${te}]`);
 		}
+
 		let resbuf = [];
-		let fetch = i => {
-			let range = ranges[i];
-			return app.fetchU8(range.url, {start:range.start, end:range.end}).then(segbuf => {
-				let cputimeStart = new Date().getTime();
-				let {buf, duration} = this.transcodeMediaSegments(segbuf, this.streams[range.s].timeStart);
-				let cputimeEnd = new Date().getTime();
-				dbp('transcode: cputime(ms):', (cputimeEnd-cputimeStart), 
-						'segbuf(MB)', segbuf.byteLength/1e6,
-						'videotime(s)', duration
-					 )
-				resbuf.push(buf);
-				if (i+1 < ranges.length)
-					return fetch(i+1);
-			});
-		}
-		if (ranges.length == 0)
-			throw new Error('empty range, maybe video end');
-		return fetch(0).then(() => concatUint8Array(resbuf));
+		let fulfill;
+		let xhr;
+
+		let promise = new Promise((_fulfill, reject) => {
+			fulfill = _fulfill;
+
+			let request = i => {
+				let range = ranges[i];
+				let {url,start,end} = range;
+				xhr = new XMLHttpRequest();
+				xhr.open('GET', url);
+				xhr.responseType = 'arraybuffer';
+				{
+					let range;
+					if (start || end) {
+						range = 'bytes=';
+						if (start)
+							range += start;
+						else
+							range += '0';
+						range += '-'
+						if (end)
+							range += end-1;
+					}
+					if (range !== undefined) {
+						xhr.setRequestHeader('Range', range);
+					}
+				}
+				xhr.onerror = reject;
+
+				let onload = ab => {
+					let segbuf = new Uint8Array(ab);
+					let cputimeStart = new Date().getTime();
+					let {buf, duration} = this.transcodeMediaSegments(segbuf, this.streams[range.s].timeStart);
+					let cputimeEnd = new Date().getTime();
+					dbp('transcode: cputime(ms):', (cputimeEnd-cputimeStart), 
+							'segbuf(MB)', segbuf.byteLength/1e6,
+							'videotime(s)', duration
+						 );
+					resbuf.push(buf);
+					if (i+1 < ranges.length) {
+						request(i+1);
+					} else {
+						fulfill(concatUint8Array(resbuf));
+					}
+				}
+
+				xhr.onload = function(e) {
+					onload(this.response);
+				};
+
+				xhr.send();
+			}
+
+			request(0);
+		});
+
+		promise.cancel = () => {
+			xhr.abort();
+			fulfill();
+		};
+
+		return promise;
 	}
 
 	fetchMediaSegmentsByTime(timeStart, timeEnd) {
@@ -403,56 +410,30 @@ app.bindVideo = (opts) => {
 
 	video.src = URL.createObjectURL(mediaSource);
 
-	let prefetching = false;
-	let lastPrefetchId;
-	let prefetchMediaSegmentsByTime = (time, len) => {
-		len = len || 10.0;
-		dbp('prefetch:', time, time+len);
-
-		prefetching = true;
-		lastPrefetchId = Math.random();
-		((id) => {
-			streams.fetchMediaSegmentsByTime(time, time+len).then(buf => {
-				if (lastPrefetchId == id) {
-					appendBuffer(buf)
-					prefetching = false;
-				}
-			})
-		})(lastPrefetchId);
-	}
-
-	let findNearestBufferedStartByTime = time => {
-		let minDiff = streams.duration, best;
-		let buffered = sourceBuffer.buffered;
-		for (let i = 0; i < buffered.length; i++) {
-			let val = buffered.start(i);
-			let diff = Math.abs(time - val);
-			if (diff < minDiff) {
-				minDiff = diff;
-				best = val;
+	let prefetchSession = null;
+	let prefetchMediaSegmentsByTime = (time, len=10) => {
+		if (prefetchSession)
+			prefetchSession.cancel();
+		let sess = streams.fetchMediaSegmentsByTime(time, time+len);
+		sess.then(buf => {
+			if (buf) {
+				appendBuffer(buf)
+			} else {
+				dbp('prefetch: cancelled')
 			}
-		}
-		return best;
+			if (sess === prefetchSession)
+				prefetchSession = null;
+		});
+		prefetchSession = sess;
 	}
 
 	let timeIsBuffered = time => {
 		let buffered = sourceBuffer.buffered;
 		for (let i = 0; i < buffered.length; i++) {
-			if (time > buffered.start(i) && time < buffered.end(i)) {
+			if (time >= buffered.start(i) && time < buffered.end(i)) {
 				return true;
 			}
 		}
-	}
-
-	let indexIsBuffered = index => {
-		let timeStart = streams.keyframes[index].time, timeEnd;
-		for (let i = index; i < streams.keyframes.length; i++) {
-			timeEnd = streams.keyframes[i].time;
-			if (timeEnd > timeStart)
-				break;
-		}
-		let time = (timeStart+timeEnd)/2;
-		return timeIsBuffered(time);
 	}
 
 	video.addEventListener('timeupdate', triggerPerNr(() => {
@@ -461,7 +442,7 @@ app.bindVideo = (opts) => {
 			return;
 
 		let time = video.currentTime + 60.0;
-		if (!timeIsBuffered(time) && !prefetching) {
+		if (!timeIsBuffered(time) && !prefetchSession) {
 			let start = buffered.end(buffered.length-1);
 			prefetchMediaSegmentsByTime(start);
 		}
@@ -493,12 +474,10 @@ app.bindVideo = (opts) => {
 			return;
 		}
 
-		let index = streams.findNearestIndexByTime(video.currentTime);
-		if (!indexIsBuffered(index)) {
-			let time = streams.keyframes[index].time;
+		if (!timeIsBuffered(video.currentTime)) {
 			dbp('seeking:', 'need prefetch');
-			prefetchMediaSegmentsByTime(time);
 			removeBuffer(0, video.duration);
+			prefetchMediaSegmentsByTime(video.currentTime);
 		}
 	}, 200))
 
@@ -523,13 +502,20 @@ app.bindVideo = (opts) => {
 				ranges.push([buffered.start(i), buffered.end(i)]);
 			}
 			dbp('bufupdate:', JSON.stringify(ranges), 'time', video.currentTime);
+			
+			if (buffered.length > 0) {
+				if (video.currentTime < buffered.start(0)) {
+					video.currentTime = buffered.start(0)+0.1;
+				} else if (video.currentTime > buffered.end(buffered.length-1)) {
+					video.currentTime = buffered.end(buffered.length-1)-0.1;
+				}
+			}
 		});
 
 		streams.probeFirst().then(() => {
 			appendBuffer(streams.getInitSegment());
-			prefetchMediaSegmentsByTime(0.0);
+			prefetchMediaSegmentsByTime(0, 6);
 		});
-
 	});
 
 	return {streams};
