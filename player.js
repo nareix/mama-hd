@@ -1,9 +1,7 @@
 
 module.exports = () => {
 	let div = document.createElement('div');
-	div.innerHTML = `
-		<video></video>
-	`;
+	div.innerHTML = `<video></video>`;
 	div.style.background = '#000';
 	div.style.position = 'fixed';
 	div.style.top = '0px';
@@ -11,6 +9,7 @@ module.exports = () => {
 	div.style.zIndex = '999999';
 
 	let video = div.querySelector('video');
+	video.autoplay = true;
 	video.controls = true;
 	video.style.position = 'absolute'
 	video.style.display = 'none'
@@ -37,11 +36,7 @@ module.exports = () => {
 
 		div.style.height = window.innerHeight+'px';
 		div.style.width = window.innerWidth+'px';
-
-		//console.log('resize', window.innerHeight, window.innerWidth, video.videoHeight, video.videoWidth)
-		//console.log('resizeResult', div.style.width, div.style.height, video.style.width, video.style.height)
 	}
-	window.addEventListener('resize', resize);
 
 	let onStarted = () => {
 		video.style.display = 'block';
@@ -91,16 +86,34 @@ module.exports = () => {
 		toggleFullScreen();
 	}))
 
-	let fastSeekInterval = 20.0;
+	let seekDelta = 5.0;
+	let doSeek = delta => {
+		let cur = self.streams.findNearestIndexByTime(video.currentTime);
+		let to;
+		let base = self.streams.keyframes[cur].time;
+		let inc = delta<0?-1:1;
+		for (let i = cur; i>=0&&i<self.streams.keyframes.length; i += inc) {
+			let time = self.streams.keyframes[i].time;
+			to = i;
+			if (Math.abs(time-base) > Math.abs(delta)) {
+				break;
+			}
+		}
+		video.currentTime = self.streams.keyframes[to].time;
+	}
+	let seekBack = () => doSeek(-seekDelta)
+	let seekForward = () => doSeek(+seekDelta)
 
-	let emitSeekBack = () => {
-		let time = self.streams.findNearestIndexTimeByTime(video.currentTime-fastSeekInterval);
-		video.currentTime = time;
+	let volumeDelta = 0.2;
+	let volumeUp = () => {
+		video.volume += volumeDelta;
+	}
+	let volumeDown = () => {
+		video.volume -= volumeDelta;
 	}
 
-	let emitSeekForward = () => {
-		let time = self.streams.findNearestIndexTimeByTime(video.currentTime+fastSeekInterval);
-		video.currentTime = time;
+	let toggleMute = () => {
+		video.muted = !video.muted;
 	}
 
 	document.body.addEventListener('keydown', (e) => {
@@ -109,12 +122,24 @@ module.exports = () => {
 				togglePlayPause();
 			} break;
 
+			case "ArrowUp": {
+				volumeUp();
+			} break;
+
+			case "KeyM": {
+				toggleMute();
+			} break;
+
+			case "ArrowDown": {
+				volumeDown();
+			} break;
+
 			case "ArrowLeft": {
-				emitSeekBack();
+				seekBack();
 			} break;
 
 			case "ArrowRight": {
-				emitSeekForward();
+				seekForward();
 			} break;
 
 			case "Enter": {
@@ -126,6 +151,8 @@ module.exports = () => {
 
 	document.body.style.margin = 0;
 	document.body.appendChild(div);
+	resize();
+	window.addEventListener('resize', resize);
 
 	return self;
 }
