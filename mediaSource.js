@@ -47,9 +47,69 @@ app.fetchAB = (url, _opts) => {
 }
 
 class Streams {
-	constructor(urls) {
+	constructor({urls,fakeDuration}) {
+		if (fakeDuration == null)
+			throw new Error('fakeDuration must set');
 		this.urls = urls;
+		this.fakeDuration = fakeDuration;
 		this.streams = [];
+		this.probeIdx = 0;
+	}
+
+	probeFirst() {
+		return this.probeOneByOne();
+	}
+
+	probeOneByOne() {
+		let url = this.urls[this.probeIdx];
+		return app.fetchU8(url, {end:1024*500}).then(u8 => {
+			let hdr = flvdemux.parseInitSegment(u8);
+			if (hdr == null)
+				return Promise.reject(new Error('probe '+url+' failed'));
+
+			this.streams.push(hdr);
+			this.duration = 0;
+			this.keyframes = [];
+			this.streams.forEach((stream, s) => {
+				stream.duration = stream.meta.duration;
+				stream.timeStart = this.duration;
+				stream.indexStart = this.keyframes.length;
+				this.duration += stream.duration;
+				stream.meta.keyframes.times.forEach((time, i) => this.keyframes.push({time:time+stream.timeStart, s, i}));
+			})
+			this.keyframes.push({time:this.duration, s:this.streams.length, i:0});
+
+			if (this.probeIdx == 0) {
+				let flvhdr = this.streams[0];
+				this.videoTrack = {
+					type: 'video',
+					id: 1,
+					duration: Math.ceil(this.fakeDuration*mp4mux.timeScale),
+					width: flvhdr.meta.width,
+					height: flvhdr.meta.height,
+					AVCDecoderConfigurationRecord: flvhdr.firstv.AVCDecoderConfigurationRecord,
+				};
+				this.audioTrack = {
+					type: 'audio',
+					id: 2,
+					duration: this.videoTrack.duration,
+					channelcount: flvhdr.firsta.channelCount,
+					samplerate: flvhdr.firsta.sampleRate,
+					samplesize: flvhdr.firsta.sampleSize,
+					AudioSpecificConfig: flvhdr.firsta.AudioSpecificConfig,
+				};
+			}
+
+			this.probeIdx++;
+			dbp(`probe: got ${this.probeIdx}/${this.urls.length}`);
+
+			if (this.probeIdx == this.urls.length) {
+				if (this.onProbeDone)
+					this.onProbeDone();
+			} else {
+				this.probeOneByOne();
+			}
+		});
 	}
 
 	probe() {
@@ -176,8 +236,8 @@ class Streams {
 		return this.fetchMediaSegmentsByIndex(indexStart, indexEnd);
 	}
 
-	getInitSegment(duration) {
-		return mp4mux.initSegment([this.videoTrack, this.audioTrack], (duration||this.duration)*mp4mux.timeScale);
+	getInitSegment() {
+		return mp4mux.initSegment([this.videoTrack, this.audioTrack], this.fakeDuration*mp4mux.timeScale);
 	}
 
 	transcodeMediaSegments(segbuf, timeStart) {
@@ -301,9 +361,20 @@ function debounce(func, wait, immediate) {
 	};
 };
 
+function triggerPerNr(fn, nr) {
+	let counter = 0;
+	return () => {
+		counter++;
+		if (counter == nr) {
+			counter = 0;
+			fn();
+		}
+	}
+}
+
 app.bindVideo = (opts) => {
 	let video = opts.video;
-	let streams = new Streams(opts.src);
+	let streams = new Streams({urls:opts.src, fakeDuration:opts.duration});
 
 	let mediaSource = new MediaSource();
 
@@ -312,7 +383,7 @@ app.bindVideo = (opts) => {
 	{
 		let queue = [];
 		let enque = fn => {
-			if (queue.length == 0)
+			if (!sourceBuffer.updating)
 				fn();
 			else
 				queue.push(fn);
@@ -321,7 +392,7 @@ app.bindVideo = (opts) => {
 		removeBuffer = (start,end) => enque(() => sourceBuffer.remove(start,end));
 		dequeAction = () => {
 			if (queue.length > 0) {
-				queue();
+				queue[0]();
 				queue = queue.slice(1);
 			}
 		}
@@ -331,8 +402,6 @@ app.bindVideo = (opts) => {
 	// seeking: if currentTime nearest keyframe not buffered load media segment else set to it
 
 	video.src = URL.createObjectURL(mediaSource);
-
-	let needSeekToTime = null;
 
 	let prefetching = false;
 	let lastPrefetchId;
@@ -386,13 +455,7 @@ app.bindVideo = (opts) => {
 		return timeIsBuffered(time);
 	}
 
-	let timeupdateCounter = 0;
-	video.addEventListener('timeupdate', () => {
-		timeupdateCounter++;
-		if (timeupdateCounter < 6)
-			return;
-		timeupdateCounter = 0;
-
+	video.addEventListener('timeupdate', triggerPerNr(() => {
 		let buffered = sourceBuffer.buffered;
 		if (buffered.length == 0)
 			return;
@@ -408,45 +471,48 @@ app.bindVideo = (opts) => {
 			if (video.currentTime > keep) 
 				removeBuffer(0, video.currentTime-keep);
 		}
-	});
+	}, 6));
+
+	let needPrefetchTime = null;
+
+	streams.onProbeDone = () => {
+		if (needPrefetchTime !== null) {
+			dbp('probedone:', 'prefetch')
+			prefetchMediaSegmentsByTime(needPrefetchTime);
+			needPrefetchTime = null;
+		}
+	}
 
 	video.addEventListener('seeking', debounce((e) => {
 		dbp('seeking:', video.currentTime)
 
+		if (video.currentTime > streams.duration) {
+			dbp('seeking:', 'wait probe done');
+			removeBuffer(0, video.duration);
+			needPrefetchTime = video.currentTime;
+			return;
+		}
+
 		let index = streams.findNearestIndexByTime(video.currentTime);
-		let time = streams.keyframes[index].time;
 		if (!indexIsBuffered(index)) {
-			dbp('seeking:', 'load segment at', time);
+			let time = streams.keyframes[index].time;
+			dbp('seeking:', 'need prefetch');
 			prefetchMediaSegmentsByTime(time);
 			removeBuffer(0, video.duration);
-			needSeekToTime = time;
 		}
 	}, 200))
 
-	mediaSource.addEventListener('sourceended', () => {
-		dbp('mediaSource: sourceended')
-	})
-
-	mediaSource.addEventListener('sourceclose', () => {
-		dbp('mediaSource: sourceclose')
-	})
+	mediaSource.addEventListener('sourceended', () => dbp('mediaSource: sourceended'))
+	mediaSource.addEventListener('sourceclose', () => dbp('mediaSource: sourceclose'))
 
 	mediaSource.addEventListener('sourceopen', e => {
 		if (mediaSource.sourceBuffers.length > 0)
 			return;
-
 		sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
-		sourceBuffer.addEventListener('error', () => {
-			//dbp('sourceBuffer: error')
-		});
 
-		sourceBuffer.addEventListener('abort', () => {
-			//dbp('sourceBuffer: abort')
-		});
-
-		sourceBuffer.addEventListener('updateend', () => {
-			//dbp('sourceBuffer: update')
-		});
+		sourceBuffer.addEventListener('error', () => dbp('sourceBuffer: error'));
+		sourceBuffer.addEventListener('abort', () => dbp('sourceBuffer: abort'));
+		//sourceBuffer.addEventListener('updateend', () => dbp('sourceBuffer: updateend'));
 
 		sourceBuffer.addEventListener('update', () => {
 			dequeAction();
@@ -456,23 +522,13 @@ app.bindVideo = (opts) => {
 			for (let i = 0; i < buffered.length; i++) {
 				ranges.push([buffered.start(i), buffered.end(i)]);
 			}
-			dbp('bufupdate:', JSON.stringify(ranges), 'currentTime', video.currentTime);
-
-			if (sourceBuffer.buffered.length > 0) {
-				let time = findNearestBufferedStartByTime(video.currentTime);
-				if (needSeekToTime !== null && Math.abs(needSeekToTime-time) < 1.0) {
-					dbp('bufupdate: seekto', time);
-					video.currentTime = time;
-					needSeekToTime = null;
-				}
-			}
+			dbp('bufupdate:', JSON.stringify(ranges), 'time', video.currentTime);
 		});
 
-		streams.probe().then(() => {
-			appendBuffer(streams.getInitSegment(opts.duration));
-			needSeekToTime = 0.0;
+		streams.probeFirst().then(() => {
+			appendBuffer(streams.getInitSegment());
 			prefetchMediaSegmentsByTime(0.0);
-		})
+		});
 
 	});
 
