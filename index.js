@@ -2,15 +2,13 @@
 // TODO
 // [OK] youku support
 // [OK] tudou support
-// [OK] avoid twice click
 // [OK] video player shortcut
-// replace fetch with ajax when get media segments
-// double buffered problem: http://www.bilibili.com/video/av4376362/index_3.html at 360.0s
-// test reset INIT_SEGMENT to reset time
-// discontinous audio problem: http://www.bilibili.com/video/av3067286/ at 97.806,108.19
+// [OK] double buffered problem: http://www.bilibili.com/video/av4376362/index_3.html at 360.0s
+//      discontinous audio problem: http://www.bilibili.com/video/av3067286/ at 97.806,108.19
+//      discontinous audio problem: http://www.bilibili.com/video/av1965365/index_6.html at 51.806
 // fast start
 
-let flvMediaSource = require('./flvMediaSource');
+let mediaSource = require('./mediaSource');
 let Nanobar = require('nanobar');
 let bilibili = require('./bilibili');
 let youku = require('./youku');
@@ -30,13 +28,23 @@ style.innerHTML = `
 }
 `
 document.head.appendChild(style);
-
-flvMediaSource.debug = true;
+mediaSource.debug = true;
 
 let getSeeker = url => {
 	let seekers = [bilibili, youku, tudou];
 	let found = seekers.filter(s => s.testUrl(url));
 	return found[0];
+}
+
+let playVideo = res => {
+	let player = createPlayer();
+	let media = mediaSource.bindVideo({
+		video:player.video,
+		src:res.src,
+		duration:res.duration,
+	});
+	player.streams = media.streams;
+	return {player, media};
 }
 
 let playUrl = url => {
@@ -45,15 +53,16 @@ let playUrl = url => {
 		flashBlocker();
 		nanobar.go(30);
 		seeker.getVideos(url).then(res => {
+			console.log('getVideosResult:', res);
 			if (res) {
-				let player = createPlayer();
+				let ctrl = playVideo(res);
+				ctrl.player.onStarted = () => nanobar.go(100);
 				nanobar.go(60)
-				player.onStarted = () => nanobar.go(100);
-				player.streams = flvMediaSource.bindVideo(player, res.src);
 			} else {
 				throw new Error('cannot play')
 			}
 		}).catch(e => {
+			console.error(e.stack)
 			nanobar.go(100);
 		});
 	}
@@ -61,9 +70,54 @@ let playUrl = url => {
 
 let cmd = {};
 
+cmd.testBuggy2Buf = () => {
+	let streams = new mediaSource.Streams(['http://localhost:6060/buggybuf2.flv']);
+	streams.probe().then(res => {
+		return streams.fetchMediaSegmentsByIndex(74, 77).then(res => {
+		});
+	}).then(res => {
+	})
+}
+
+cmd.testBuggy2Play = () => {
+	cmd.ctrl = playVideo({
+		src:[
+			'http://localhost:6060/buggybuf2.flv',
+		],
+	});
+	setTimeout(() => cmd.ctrl.player.video.currentTime = 350.0, 500);
+}
+
+cmd.fetchDiscontAudio = () => {
+	// at 209.667
+	let streams = new mediaSource.Streams(['http://localhost:6060/discontaudio.flv']);
+	streams.probe().then(res => {
+		return streams.fetchMediaSegmentsByIndex(40,41);
+	}).then(() => {
+		return streams.fetchMediaSegmentsByIndex(41,42);
+	})
+}
+cmd.fetchDiscontAudio()
+
+cmd.playDiscontAudio = () => {
+	cmd.ctrl = playVideo({
+		src:[
+			'http://localhost:6060/discontaudio.flv',
+		],
+	});
+	setTimeout(() => cmd.ctrl.player.video.currentTime = 51.0, 400);
+}
+
 cmd.testPlayerUI = () => {
-	let player = createPlayer();
-	player.streams = flvMediaSource.bindVideo(player.video, ['http://localhost:6060/projectindex-2.flv']);
+	cmd.ctrl = playVideo({
+		src:[
+			'http://localhost:6060/projectindex-0.flv',
+			'http://localhost:6060/projectindex-1.flv',
+			'http://localhost:6060/projectindex-2.flv',
+			'http://localhost:6060/projectindex-3.flv',
+		],
+		duration: 1420.0,
+	});
 }
 
 cmd.youku = youku;
@@ -87,10 +141,7 @@ cmd.playUrl = url => {
 	playUrl(url)
 }
 
-if (!window.mamaloaded) {
-	playUrl(location.href);
-	window.mamaloaded = true;
-}
+playUrl(location.href);
 
 window.cmd = cmd;
 
