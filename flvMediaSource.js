@@ -137,6 +137,10 @@ class Streams {
 		})
 	}
 
+	findNearestIndexTimeByTime(time) {
+		return this.keyframes[this.findNearestIndexByTime(time)].time;
+	}
+
 	findNearestIndexByTime(time) {
 		let minDiff = this.duration, best;
 		this.keyframes.forEach((keyframe, i) => {

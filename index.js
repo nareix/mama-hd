@@ -1,12 +1,13 @@
 
 // TODO
 // [OK] youku support
+// [OK] tudou support
+// [OK] avoid twice click
+// [OK] video player shortcut
 // replace fetch with ajax when get media segments
 // double buffered problem: http://www.bilibili.com/video/av4376362/index_3.html at 360.0s
 // test reset INIT_SEGMENT to reset time
 // discontinous audio problem: http://www.bilibili.com/video/av3067286/ at 97.806,108.19
-// avoid twice push
-// video player shortcut
 // fast start
 
 let flvMediaSource = require('./flvMediaSource');
@@ -46,13 +47,14 @@ let playUrl = url => {
 		seeker.getVideos(url).then(res => {
 			if (res) {
 				let player = createPlayer();
-				nanobar = Nanobar();
 				nanobar.go(60)
 				player.onStarted = () => nanobar.go(100);
-				flvMediaSource.bindVideo(player.video, res.src);
+				player.streams = flvMediaSource.bindVideo(player, res.src);
 			} else {
-				nanobar.go(100);
+				throw new Error('cannot play')
 			}
+		}).catch(e => {
+			nanobar.go(100);
 		});
 	}
 }
@@ -61,7 +63,7 @@ let cmd = {};
 
 cmd.testPlayerUI = () => {
 	let player = createPlayer();
-	flvMediaSource.bindVideo(player.video, ['http://localhost:8080/projectindex-0.flv']);
+	player.streams = flvMediaSource.bindVideo(player.video, ['http://localhost:6060/projectindex-2.flv']);
 }
 
 cmd.youku = youku;
@@ -85,7 +87,10 @@ cmd.playUrl = url => {
 	playUrl(url)
 }
 
-playUrl(location.href);
+if (!window.mamaloaded) {
+	playUrl(location.href);
+	window.mamaloaded = true;
+}
 
 window.cmd = cmd;
 

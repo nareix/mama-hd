@@ -5,6 +5,10 @@ module.exports = () => {
 		<video></video>
 	`;
 	div.style.background = '#000';
+	div.style.position = 'fixed';
+	div.style.top = '0px';
+	div.style.left = '0px';
+	div.style.zIndex = '999999';
 
 	let video = div.querySelector('video');
 	video.controls = true;
@@ -48,8 +52,79 @@ module.exports = () => {
 	}
 	video.addEventListener('canplay', onStarted);
 
+	let toggleFullScreen = () => {
+		if (!document.webkitFullscreenElement) {
+			div.webkitRequestFullScreen(Element.ALLOW_KEYBOARD_INPUT);
+		} else {
+			document.webkitCancelFullScreen();
+		}
+	}
+
+	let togglePlayPause = () => {
+		if (video.paused)
+			video.play();
+		else
+			video.pause();
+	}
+
+	function doubleclick(el, onsingle, ondouble) {
+		let dbl;
+		return () => {
+			if (!dbl) {
+				dbl = true;
+				setTimeout(function () {
+					if (dbl) {
+						onsingle();
+					}
+					dbl = false;
+				}, 300);
+			} else {
+				dbl = false;
+				ondouble();
+			}
+		}
+	}
+
+	video.addEventListener('mousedown', doubleclick(video, () => {
+		togglePlayPause();
+	}, () => {
+		toggleFullScreen();
+	}))
+
+	let fastSeekInterval = 20.0;
+
+	let emitSeekBack = () => {
+		let time = self.streams.findNearestIndexTimeByTime(video.currentTime-fastSeekInterval);
+		video.currentTime = time;
+	}
+
+	let emitSeekForward = () => {
+		let time = self.streams.findNearestIndexTimeByTime(video.currentTime+fastSeekInterval);
+		video.currentTime = time;
+	}
+
+	document.body.addEventListener('keydown', (e) => {
+		switch (e.code) {
+			case "Space": {
+				togglePlayPause();
+			} break;
+
+			case "ArrowLeft": {
+				emitSeekBack();
+			} break;
+
+			case "ArrowRight": {
+				emitSeekForward();
+			} break;
+
+			case "Enter": {
+				if (e.metaKey || e.ctrlKey)
+					toggleFullScreen();
+			} break;
+		}
+	});
+
 	document.body.style.margin = 0;
-	document.body.innerHTML = '';
 	document.body.appendChild(div);
 
 	return self;
