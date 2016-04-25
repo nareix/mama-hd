@@ -154,9 +154,12 @@ class Streams {
 			let range = ranges[i];
 			return app.fetchU8(range.url, {start:range.start, end:range.end}).then(segbuf => {
 				let cputimeStart = new Date().getTime();
-				let buf = this.transcodeMediaSegments(segbuf, this.streams[range.s].timeStart);
+				let {buf, duration} = this.transcodeMediaSegments(segbuf, this.streams[range.s].timeStart);
 				let cputimeEnd = new Date().getTime();
-				dbp('transcode: cputime(ms):', (cputimeEnd-cputimeStart), 'segbuf(MB)', segbuf.byteLength/1e6)
+				dbp('transcode: cputime(ms):', (cputimeEnd-cputimeStart), 
+						'segbuf(MB)', segbuf.byteLength/1e6,
+						'videotime(s)', duration
+					 )
 				resbuf.push(buf);
 				if (i+1 < ranges.length)
 					return fetch(i+1);
@@ -261,9 +264,6 @@ class Streams {
 			dbp('video.baseMediaDecodeTime:', videoTrack.baseMediaDecodeTime/mp4mux.timeScale)
 			dbp('audio.baseMediaDecodeTime:', audioTrack.baseMediaDecodeTime/mp4mux.timeScale)
 		}
-		//console.log('audio',audioTrack.samples.length, 'video',videoTrack.samples.length)
-		//console.log('audioStart', audioTrack.baseMediaDecodeTime/mp4mux.timeScale)
-		//console.log('videoStart', videoTrack.baseMediaDecodeTime/mp4mux.timeScale)
 
 		let moof, _mdat, mdat;
 		let list = [];
@@ -280,7 +280,7 @@ class Streams {
 		mdat = mp4mux.mdat(_mdat);
 		list = list.concat([moof, mdat]);
 
-		return concatUint8Array(list);
+		return {buf:concatUint8Array(list), duration:segpkts[segpkts.length-1].dts-segpkts[0].dts};
 	}
 }
 
