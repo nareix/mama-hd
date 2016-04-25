@@ -1,5 +1,13 @@
 
-// BUGGY video: http://www.bilibili.com/video/av4376362/index_3.html at 360.0s
+// TODO
+// [OK] youku support
+// replace fetch with ajax when get media segments
+// double buffered problem: http://www.bilibili.com/video/av4376362/index_3.html at 360.0s
+// test reset INIT_SEGMENT to reset time
+// discontinous audio problem: http://www.bilibili.com/video/av3067286/ at 97.806,108.19
+// avoid twice push
+// video player shortcut
+// fast start
 
 let flvMediaSource = require('./flvMediaSource');
 let Nanobar = require('nanobar');
@@ -53,6 +61,8 @@ cmd.testPlayerUI = () => {
 	flvMediaSource.bindVideo(player.video, ['http://localhost:8080/projectindex-0.flv']);
 }
 
+cmd.youku = youku;
+
 cmd.testGetVideos = url => {
 	let seeker = getSeeker(url);
 	if (!seeker) {
@@ -64,7 +74,8 @@ cmd.testGetVideos = url => {
 
 cmd.testYouku = () => {
 	youku.getVideos('http://v.youku.com/v_show/id_XMTU0NTYzOTIyMA==.html?from=1-1').then(res => console.log(res))
-	youku.testEncryptFuncs()
+	//youku.testEncryptFuncs()
+	//youku.showlog()
 }
 
 cmd.playUrl = url => {
