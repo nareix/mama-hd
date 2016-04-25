@@ -13,6 +13,7 @@ let flvMediaSource = require('./flvMediaSource');
 let Nanobar = require('nanobar');
 let bilibili = require('./bilibili');
 let youku = require('./youku');
+let tudou = require('./tudou');
 let createPlayer = require('./player');
 let flashBlocker = require('./flashBlocker');
 
@@ -32,7 +33,7 @@ document.head.appendChild(style);
 flvMediaSource.debug = true;
 
 let getSeeker = url => {
-	let seekers = [bilibili, youku];
+	let seekers = [bilibili, youku, tudou];
 	let found = seekers.filter(s => s.testUrl(url));
 	return found[0];
 }
@@ -49,6 +50,8 @@ let playUrl = url => {
 				nanobar.go(60)
 				player.onStarted = () => nanobar.go(100);
 				flvMediaSource.bindVideo(player.video, res.src);
+			} else {
+				nanobar.go(100);
 			}
 		});
 	}

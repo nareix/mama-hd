@@ -76,13 +76,29 @@ var extractFlvPath = exports.extractFlvPath = function(info) {
 		return url;
 	});
 
-	return Promise.all(urls.map(url => fetch(url).then(res => res.json())));
+	return Promise.all(urls.map(url => fetch(url).then(res => res.json()).then(r => r[0].server)))
+		.then(urls => {
+			return {src: urls};
+		});
 }
 
-exports.getVideos = function (url) {
-	if (window.videoId)
-		return parseYoukuCode(window.videoId);
-	else return fetch(url).then(res => res.text()).then(res => {
+var getVideosByVideoId = exports.getVideosByVideoId = function (vid) {
+	return Promise.all([
+		fetch('http://play.youku.com/play/get.json?vid='+vid+'&ct=10').then(res => res.json()),
+		fetch('http://play.youku.com/play/get.json?vid='+vid+'&ct=12').then(res => res.json()),
+	]).then(res => {
+		var data10 = res[0].data;
+		var data12 = res[1].data;
+		return extractFlvPath({data10,data12});
+	})
+}
+
+var getVideosByVcode = exports.getVideosByVcode = function (vcode) {
+	return getVideosByUrl(`http://v.youku.com/v_show/id_${vcode}.html`);
+}
+
+var getVideosByUrl = exports.getVideosByUrl = function (url) {
+	return fetch(url).then(res => res.text()).then(res => {
 		var parser = new DOMParser();
 		var doc = parser.parseFromString(res, 'text/html');
 		var scripts = Array.prototype.slice.call(doc.querySelectorAll('script')).map(script => script.textContent);
@@ -90,18 +106,15 @@ exports.getVideos = function (url) {
 		if (videoId) {
 			videoId = videoId[0].match(/videoId = '(\d+)'/);
 			if (videoId)
-				return videoId[1];
+				return getVideosByVideoId(videoId[1]);
 		}
-		throw new Error(`parse ${url} failed`);
-	}).then(vid => {
-		return Promise.all([
-			fetch('http://play.youku.com/play/get.json?vid='+vid+'&ct=10').then(res => res.json()),
-			fetch('http://play.youku.com/play/get.json?vid='+vid+'&ct=12').then(res => res.json()),
-		])
-	}).then(res => {
-		var data10 = res[0].data;
-		var data12 = res[1].data;
-		return extractFlvPath({data10,data12});
 	})
+}
+
+exports.getVideos = function (url) {
+	if (window.videoId)
+		return getVideosByVideoId(window.videoId);
+	else 
+		return getVideosByUrl(url);
 }
 

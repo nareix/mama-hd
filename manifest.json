@@ -18,6 +18,6 @@
 		"webRequestBlocking",
 		"tabs",
 		"notifications",
-		"*://*.youku.com/*"
+		"*://*/*"
 	]
 }
