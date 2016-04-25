@@ -2,6 +2,7 @@
   "name": "MAMA-HD",
   "version": "2.0",
   "manifest_version": 2,
+	"minimum_chrome_version": "45",
   "browser_action": {
     "default_icon": "icon128.png"
   },
