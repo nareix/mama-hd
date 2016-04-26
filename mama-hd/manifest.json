@@ -1,7 +1,8 @@
 {
   "name": "MAMA-HD",
-  "version": "2.0",
+  "version": "0.9",
   "manifest_version": 2,
+	"minimum_chrome_version": "48",
   "browser_action": {
     "default_icon": "icon128.png"
   },
@@ -17,7 +18,6 @@
 		"webRequest",
 		"webRequestBlocking",
 		"tabs",
-		"notifications",
 		"*://*/*"
 	]
 }
