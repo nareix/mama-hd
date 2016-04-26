@@ -1,30 +1,28 @@
 # 妈妈再也不用担心我的 MacBook 发热了计划之 1080P
 
-```
-> 妈妈计划用于解决在看视频网站时 MacBook 发热严重的问题。使用video来替换原来的flash播放器。
-```
-
-本插件支持在 Chrome 里用原生 video 标签播放 Bilibili/土豆/优酷 的 1080P 视频，不发热！
+『[妈妈计划](https://github.com/zythum/mama2/)』用于解决在看视频网站时 MacBook 发(guang)热(gao)严(tai)重(duo)的问题，使用 video 来替换原来的 flash 播放器。本分支计划实现了用原生 video 实时转码播放 Bilibili/土豆/优酷 的 1080P flv 格式视频：
 
 ![](https://raw.githubusercontent.com/nareix/mama-hd/master/screenshot.png)
 
-# 安装使用
+# 使用
 
-下载crx文件（点击 Chrome 右上角选择设置->扩展程序->把刚下载的crx文件拖拽进去）
+[本地安装](https://github.com/nareix/mama-hd/raw/master/mama-hd.crx)（点击 Chrome 右上角选择设置->扩展程序->把刚下载的crx文件拖拽进去）
 
-打开一个视频页面，点击右上角的 ![](https://raw.githubusercontent.com/nareix/mama-hd/master/mama-hd/icon48.png) 图标就可以播放了
+要求 Chrome 版本大于 48
 
-播放器 <kbd>⌘+Enter</kbd>全屏 <kbd>↑↓</kbd>音量 <kbd>←→</kbd>快进快退
+打开一个视频页面，点击右上角的图标就可以播放了
 
-# 技术原理
+ <kbd>⌘ + Enter</kbd> 全屏 <kbd>↑ ↓</kbd> 音量 <kbd>← →</kbd> 快进快退 <kbd>M</kbd> 静音
 
-自从用了妈妈计划幸福感提升了很多，可惜不支持 1080P，这是因为国内的大多数视频网站对于 1080P 的片源仍然采用分段 flv 来存放，默认方法没法播放。偶尔忍不住高清诱惑打开 flash 看一会儿，MacBook 又开始发热了！Bilibili 都被人 fuck 了无数次了，能不能改改？人家百度盘用的也是 flash 但就不发热！还有土豆的弹幕打开何止是发热，简直要冒烟！妈妈又要担心了！
+低于 1080P 的视频建议使用妈妈主计划
 
-有一天妈妈突然告诉我：w3c 标准里面有一个东西叫做 Media Source Extensions，已经被 Chrome 支持了，它能播放 fmp4（Fragmented MP4），这种 mp4 可以随意取一个片段播放，不需要全局的索引信息，dash.js 就是基于它做的视频直播。而 Chrome 里也有速度很快的二进制操作（Uint8Array，底层是零拷贝），所以只要把 flv 在浏览器里面实时转换成 fmp4 就可以了。
+# 原理
 
-经过实测，平均转码 10s 的视频只需要 20ms 左右（i5 2.9G），CPU 占用与播放相比可以忽略。
+自从用了妈妈计划幸福感提升了很多，可惜不支持 1080P，这是因为国内的大多数视频网站对于 1080P 的片源仍然采用分段 flv 来存放，默认方法没法播放。偶尔忍不住高清诱惑打开 flash 看一会儿，MacBook 又开始发热了！Bilibili 都被人 FUCK 了无数次了，官方能不能改改？妈妈又开始担心了！
 
-**注意**：低于 1080P 的视频推荐使用原版妈妈计划
+有一天妈妈对我说：w3c 标准里面有一个东西叫做 Media Source Extensions，已经被 Chrome 支持了，它能播放 fmp4（Fragmented MP4），这种 mp4 可以随意取一个片段播放，不需要全局的索引信息，dash.js 就是基于它做的视频直播。而 Chrome 里也有速度很快的二进制操作（Uint8Array，底层是零拷贝），所以只要把 flv 在浏览器里面实时转换成 fmp4 就可以了。
+
+**经过实测，平均转码 10s 的视频只需要 20~40ms 左右（i5 2.9G），CPU 占用与播放相比可以忽略。**
 
 # 特性
 
@@ -45,3 +43,7 @@
 you-get
 
 mux.js
+
+## License
+
+MIT
