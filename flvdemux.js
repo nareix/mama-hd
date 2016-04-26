@@ -212,7 +212,6 @@ let parseMediaSegment = uint8arr => {
 		default:
 			//throw new Error(`unknown tag=${tagType}`);
 		}
-
 		br.skip(4);
 	}
 
