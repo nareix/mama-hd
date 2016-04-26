@@ -60,10 +60,34 @@ class Streams {
 		return this.probeOneByOne();
 	}
 
+	fetchInitSegment(url) {
+		let parser = new flvdemux.InitSegmentParser();
+		let pump = reader => {
+			return reader.read().then(res => {
+				if (res.done) {
+					//dbp('initsegparser: EOF');
+					return;
+				}
+				let chunk = res.value;
+				//dbp(`initsegparser: incoming ${chunk.byteLength}`);
+				let done = parser.push(chunk);
+				if (done) {
+					//dbp('initsegparser: finished', done);
+					reader.cancel();
+					return done;
+				} else {
+					return pump(reader);
+				}
+			});
+		}
+		let headers = new Headers();
+		headers.append('Range', 'bytes=0-5000000');
+		return fetch(url, {headers}).then(res => pump(res.body.getReader()));
+	}
+
 	probeOneByOne() {
 		let url = this.urls[this.probeIdx];
-		return app.fetchU8(url, {end:1024*500}).then(u8 => {
-			let hdr = flvdemux.parseInitSegment(u8);
+		return this.fetchInitSegment(url).then(hdr => {
 			if (hdr == null)
 				return Promise.reject(new Error('probe '+url+' failed'));
 

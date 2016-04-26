@@ -210,13 +210,86 @@ let parseMediaSegment = uint8arr => {
 			break;
 
 		default:
-			throw new Error(`unknown tag=${tagType}`);
+			//throw new Error(`unknown tag=${tagType}`);
 		}
 
 		br.skip(4);
 	}
 
 	return packets;
+}
+
+class InitSegmentParser {
+	constructor() {
+		let meta, firsta, firstv;
+		this._readloop = (function *() {
+			yield 5;
+			let dataOffset = yield 4;
+			yield dataOffset-9+4;
+
+			for (;;) {
+				let tagType = yield 1;
+				let dataSize = yield 3;
+				let timeStamp = yield 3;
+				yield 4;
+				let data = yield {len:dataSize};
+				if (tagType == TAG_SCRIPTDATA) {
+					meta = parseScriptData(data);
+				} else if (tagType == TAG_VIDEO && firstv == null) {
+					firstv = parseVideoPacket(data);
+				} else if (tagType == TAG_AUDIO && firsta == null) {
+					firsta = parseAudioPacket(data);
+				}
+				if (meta && firsta && firstv) {
+					return {meta,firstv,firsta};
+				}
+				yield 4;
+			}
+		})();
+		this._next();
+	}
+
+	_next() {
+		let r = this._readloop.next(this._val);
+		if (r.done) {
+			this._done = r.value;
+		} else {
+			if (typeof(r.value) == 'number') {
+				this._left = r.value;
+				this._val = 0;
+			} else {
+				this._left = r.value.len;
+				if (this._left > 1024*1024*16)
+					throw new Error('buf too big')
+				this._val = new Uint8Array(this._left);
+			}
+		}
+	}
+
+	push(input) {
+		let pos = 0;
+		while (!this._done && pos < input.byteLength) {
+			if (typeof(this._val) == 'number') {
+				while (this._left > 0 && pos < input.byteLength) {
+					this._val <<= 8;
+					this._val |= input[pos];
+					this._left--;
+					pos++;
+				}
+			} else {
+				while (this._left > 0 && pos < input.byteLength) {
+					let len = Math.min(this._left, input.byteLength-pos);
+					this._val.set(input.slice(pos,pos+len), this._val.byteLength-this._left);
+					this._left -= len;
+					pos += len;
+				}
+			}
+			if (this._left == 0) {
+				this._next();
+			}
+		}
+		return this._done;
+	}
 }
 
 let parseInitSegment = uint8arr => {
@@ -255,5 +328,7 @@ let parseInitSegment = uint8arr => {
 	}
 }
 
-module.exports = {parseInitSegment, parseMediaSegment};
+exports.InitSegmentParser = InitSegmentParser;
+exports.parseInitSegment = parseInitSegment;
+exports.parseMediaSegment = parseMediaSegment;
 
