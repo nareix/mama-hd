@@ -2,6 +2,7 @@
 //TODO
 // [DONE] sourceBuffer: opeartion queue
 // [DONE] seek to keyframe problem
+// fetchMediaSegmentsBySizeInMB
 
 'use strict'
 
@@ -147,11 +148,11 @@ class Streams {
 		})
 	}
 
-	findNearestIndexTimeByTime(time) {
-		return this.keyframes[this.findNearestIndexByTime(time)].time;
+	findNearestIndexTimeByTime(time, delta) {
+		return this.keyframes[this.findNearestIndexByTime(time, delta)].time;
 	}
 
-	findNearestIndexByTime(time) {
+	findNearestIndexByTime(time, delta) {
 		let minDiff = this.duration, best;
 
 		this.keyframes.forEach((keyframe, i) => {
@@ -162,6 +163,19 @@ class Streams {
 				best = i;
 			}
 		})
+
+		if (delta !== undefined) {
+			let base = this.keyframes[best].time;
+			let inc = delta<0?-1:1;
+			for (let i = best; i>=0&&i<this.keyframes.length; i += inc) {
+				let time = this.keyframes[i].time;
+				best = i;
+				if (Math.abs(time-base) > Math.abs(delta)) {
+					break;
+				}
+			}
+		}
+
 		return best;
 	}
 
@@ -204,7 +218,7 @@ class Streams {
 					if (range !== undefined) {
 						xhr.setRequestHeader('Range', range);
 					}
-					dbp('fetch:', `bytes=[${start},${end}]`);
+					dbp('fetch:', `bytes=[${start},${end}] ${(end-start)/1e6}M`);
 				}
 				xhr.onerror = reject;
 
@@ -241,7 +255,7 @@ class Streams {
 
 	fetchMediaSegmentsByTime(timeStart, timeEnd) {
 		let indexStart = this.findNearestIndexByTime(timeStart);
-		let indexEnd = this.findNearestIndexByTime(timeEnd);
+		let indexEnd = this.findNearestIndexByTime(timeStart,timeEnd-timeStart);
 		return this.fetchMediaSegmentsByIndex(indexStart, indexEnd);
 	}
 
@@ -408,32 +422,29 @@ app.bindVideo = (opts) => {
 		}
 	}
 
-	// updateend: if currentTime not buffered set to nearby buffered start
-	// seeking: if currentTime nearest keyframe not buffered load media segment else set to it
-
 	video.src = URL.createObjectURL(mediaSource);
 
 	let prefetchSession = null;
-	let prefetchMediaSegmentsByTime = (time, len=10) => {
-		if (prefetchSession)
-			prefetchSession.cancel();
-		let sess = streams.fetchMediaSegmentsByTime(time, time+len);
-		sess.then(buf => {
-			if (buf) {
-				appendBuffer(buf)
-			} else {
-				dbp('prefetch: cancelled')
-			}
-			if (sess === prefetchSession)
-				prefetchSession = null;
-		});
-		prefetchSession = sess;
-	}
 	let stopPrefetch = () => {
 		if (prefetchSession) {
 			prefetchSession.cancel();
 			prefetchSession = null;
 		}
+	}
+	let prefetchMediaSegmentsByTime = (time, len=10) => {
+		stopPrefetch();
+		let sess = streams.fetchMediaSegmentsByTime(time, time+len);
+		sess.then(buf => {
+			if (buf) {
+				dbp('prefetch: done');
+				appendBuffer(buf)
+			} else {
+				dbp('prefetch: cancelled');
+			}
+			if (sess === prefetchSession)
+				prefetchSession = null;
+		});
+		prefetchSession = sess;
 	}
 
 	let timeIsBuffered = time => {
@@ -449,9 +460,11 @@ app.bindVideo = (opts) => {
 		let buffered = sourceBuffer.buffered;
 		if (buffered.length == 0)
 			return;
+		dbp('timeupdate:', video.currentTime);
 
 		let time = video.currentTime + 60.0;
 		if (!timeIsBuffered(time) && !prefetchSession) {
+			dbp('timeupdate: prefetch');
 			let start = buffered.end(buffered.length-1);
 			prefetchMediaSegmentsByTime(start);
 		}
@@ -505,7 +518,7 @@ app.bindVideo = (opts) => {
 	mediaSource.addEventListener('sourceopen', e => {
 		if (mediaSource.sourceBuffers.length > 0)
 			return;
-		sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E, mp4a.40.2"');
+		sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.64001E, mp4a.40.2"');
 
 		sourceBuffer.addEventListener('error', () => dbp('sourceBuffer: error'));
 		sourceBuffer.addEventListener('abort', () => dbp('sourceBuffer: abort'));
@@ -520,7 +533,11 @@ app.bindVideo = (opts) => {
 				ranges.push([buffered.start(i), buffered.end(i)]);
 			}
 			dbp('bufupdate:', JSON.stringify(ranges), 'time', video.currentTime);
-			
+
+			// workaround
+			if (buffered.length > 1) {
+			}
+
 			if (buffered.length > 0) {
 				if (video.currentTime < buffered.start(0) || 
 						video.currentTime > buffered.end(buffered.length-1)) 
