@@ -10,7 +10,7 @@ exports.testUrl = function (url) {
 exports.getVideos = function (url) {  
 	if (window.pageConfig && window.pageConfig.vcode)
 		return youku.getVideosByVcode(window.pageConfig.vcode);
-	else return fetch(url).then(res => res.text()).then(res => {
+	else return fetch(url, {credentials: 'include'}).then(res => res.text()).then(res => {
 		var vcode = res.match(/vcode: '(\S+)'/);
 		console.log(vcode);
 		if (vcode) 

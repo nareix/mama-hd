@@ -2,9 +2,9 @@
 module.exports.testUrl = url => url.match('bilibili.com/')
 
 module.exports.getVideos = function (url) {
-	return fetch(url).then(res => res.text()).then(res => {
+	return fetch(url, {credentials: 'include'}).then(res => res.text()).then(res => {
 		var cid = res.match(/cid=(\d+)/);
-		if (cid) 
+		if (cid)
 			return cid[1];
 	}).then(function(cid) {
 		if (!cid)

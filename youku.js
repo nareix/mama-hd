@@ -96,7 +96,7 @@ var getVideosByVcode = exports.getVideosByVcode = function (vcode) {
 }
 
 var getVideosByUrl = exports.getVideosByUrl = function (url) {
-	return fetch(url).then(res => res.text()).then(res => {
+	return fetch(url, {credentials: 'include'}).then(res => res.text()).then(res => {
 		var parser = new DOMParser();
 		var doc = parser.parseFromString(res, 'text/html');
 		var scripts = Array.prototype.slice.call(doc.querySelectorAll('script')).map(script => script.textContent);
