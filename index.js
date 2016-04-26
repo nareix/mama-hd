@@ -6,7 +6,12 @@
 // [OK] double buffered problem: http://www.bilibili.com/video/av4376362/index_3.html at 360.0s
 //      discontinous audio problem: http://www.bilibili.com/video/av3067286/ at 97.806,108.19
 //      discontinous audio problem: http://www.bilibili.com/video/av1965365/index_6.html at 51.806
-// fast start
+// [OK] fast start
+// [OK] open twice
+// [OK] http://www.bilibili.com/video/av3659561/index_57.html: Error: empty range, maybe video end
+// [OK] http://www.bilibili.com/video/av3659561/index_56.html: First segment too small
+// http://www.bilibili.com/video/av1753789/: mediaSource: sourceclose,Failed to execute 'appendBuffer' on 'SourceBuffer'
+// double buffered problem: http://www.bilibili.com/video/av4467810/
 
 'use strict'
 
@@ -155,6 +160,25 @@ cmd.testXhr = () => {
 		console.log('onerror')
 	}
 	xhr.send();
+}
+
+cmd.testWriteFile = () => {
+	chrome.fileSystem.chooseEntry({type:'saveFile'}, (file) => {
+		file.createWriter(writer => {
+			writer.onwrittend = () => console.log('write complete');
+			let u8 = new Uint8Array([1,2,3,4]);
+			writer.write(u8);
+		});
+	});
+}
+
+cmd.fetchMediacloseBugVideo= () => {
+	let url = 'http://www.bilibili.com/video/av1753789/';
+	getSeeker(url).getVideos(url).then(res => {
+		let streams = mediaSource.Streams({urls: res.src, fakeDuration: res.duration});
+		streams.probeFirst().then(() => {
+		});
+	})
 }
 
 cmd.testfetch = () => {
