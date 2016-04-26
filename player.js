@@ -40,12 +40,12 @@ module.exports = () => {
 
 	let onStarted = () => {
 		video.style.display = 'block';
-		video.removeEventListener('canplay', onStarted);
+		video.removeEventListener('loadedmetadata', onStarted);
 		resize();
 		if (self.onStarted)
 			self.onStarted();
 	}
-	video.addEventListener('canplay', onStarted);
+	video.addEventListener('loadedmetadata', onStarted);
 
 	let toggleFullScreen = () => {
 		if (!document.webkitFullscreenElement) {
