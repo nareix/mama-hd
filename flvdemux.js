@@ -161,7 +161,7 @@ let parseVideoPacket = (uint8arr, dts) => {
 			pkt.NALUs = br.readBuf(br.len());
 			pkt.isKeyFrame = frameType==1;
 		} else if (type == 2) {
-			throw new Error('type=2');
+			//throw new Error('type=2');
 		}
 	}
 	return pkt;
