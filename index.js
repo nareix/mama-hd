@@ -8,6 +8,8 @@
 //      discontinous audio problem: http://www.bilibili.com/video/av1965365/index_6.html at 51.806
 // fast start
 
+'use strict'
+
 let mediaSource = require('./mediaSource');
 let Nanobar = require('nanobar');
 let bilibili = require('./bilibili');
@@ -15,6 +17,7 @@ let youku = require('./youku');
 let tudou = require('./tudou');
 let createPlayer = require('./player');
 let flashBlocker = require('./flashBlocker');
+let flvdemux = require('./flvdemux');
 
 let nanobar = new Nanobar();
 
@@ -97,7 +100,6 @@ cmd.fetchDiscontAudio = () => {
 		return streams.fetchMediaSegmentsByIndex(41,42);
 	})
 }
-cmd.fetchDiscontAudio()
 
 cmd.playDiscontAudio = () => {
 	cmd.ctrl = playVideo({
@@ -139,6 +141,51 @@ cmd.testYouku = () => {
 
 cmd.playUrl = url => {
 	playUrl(url)
+}
+
+cmd.testXhr = () => {
+	var xhr = new XMLHttpRequest();
+	xhr.open('GET', 'http://localhost:6060/projectindex-0.flv');
+	setTimeout(() => xhr.abort(), 100);
+	xhr.onload = function(e) {
+		console.log(this.status);
+		console.log(this.response.length);
+	}
+	xhr.onerror = function() {
+		console.log('onerror')
+	}
+	xhr.send();
+}
+
+cmd.testfetch = () => {
+	let dbp = console.log.bind(console)
+
+	let parser = new flvdemux.InitSegmentParser();
+	let total = 0;
+	let pump = reader => {
+		return reader.read().then(res => {
+			if (res.done) {
+				dbp('parser: EOF');
+				return;
+			}
+			let chunk = res.value;
+			total += chunk.byteLength;
+			dbp(`parser: incoming ${chunk.byteLength}`);
+			let done = parser.push(chunk);
+			if (done) {
+				dbp('parser: finished', done);
+				reader.cancel();
+				return done;
+			} else {
+				return pump(reader);
+			}
+		});
+	}
+
+	let headers = new Headers();
+	headers.append('Range', 'bytes=0-400000');
+	fetch(`http://27.221.48.172/youku/65723A1CDA44683D499698466F/030001290051222DE95D6C055EEB3EBFDE3F09-E65E-1E0A-218C-3CDFACC4F973.flv`, {headers}).then(res => pump(res.body.getReader()))
+		.then(res => console.log(res));
 }
 
 playUrl(location.href);
