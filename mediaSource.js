@@ -549,7 +549,7 @@ app.bindVideo = (opts) => {
 
 		streams.probeFirst().then(() => {
 			appendBuffer(streams.getInitSegment());
-			prefetchMediaSegmentsByTime(0, 6);
+			prefetchMediaSegmentsByTime(0, 8);
 		});
 	});
 
