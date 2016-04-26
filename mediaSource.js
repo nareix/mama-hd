@@ -435,7 +435,7 @@ app.bindVideo = (opts) => {
 	video.src = URL.createObjectURL(mediaSource);
 
 	let prefetchSession = null;
-	let prefetchMediaSegmentsByTime = (time, len=10) => {
+	let prefetchMediaSegmentsByTime = (time, len=5) => {
 		if (prefetchSession)
 			prefetchSession.cancel();
 		let sess = streams.fetchMediaSegmentsByTime(time, time+len);
@@ -449,6 +449,12 @@ app.bindVideo = (opts) => {
 				prefetchSession = null;
 		});
 		prefetchSession = sess;
+	}
+	let stopPrefetch = () => {
+		if (prefetchSession) {
+			prefetchSession.cancel();
+			prefetchSession = null;
+		}
 	}
 
 	let timeIsBuffered = time => {
@@ -494,6 +500,7 @@ app.bindVideo = (opts) => {
 		if (video.currentTime > streams.duration) {
 			dbp('seeking:', 'wait probe done');
 			removeBuffer(0, video.duration);
+			stopPrefetch();
 			needPrefetchTime = video.currentTime;
 			return;
 		}
