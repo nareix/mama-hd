@@ -27,25 +27,6 @@ let concatUint8Array = function(list) {
 	return res;
 }
 
-app.fetchAB = (url, _opts) => {
-	let range;
-	let opts = {};
-	if (_opts.start || _opts.end) {
-		range = 'bytes=';
-		if (_opts.start)
-			range += _opts.start;
-		else
-			range += '0';
-		range += '-'
-		if (_opts.end)
-			range += _opts.end-1;
-	}
-	if (range !== undefined) {
-		opts.headers = {Range: range}
-	}
-	return fetch(url, opts).then(res => res.arrayBuffer());
-}
-
 class Streams {
 	constructor({urls,fakeDuration}) {
 		if (fakeDuration == null)
@@ -189,15 +170,15 @@ class Streams {
 		if (ranges.length == 0)
 			throw new Error('empty range, maybe video end');
 
+		let resbuf = [];
+		let fulfill;
+		let xhr;
+
 		{
 			let ts = this.keyframes[indexStart].time;
 			let te = this.keyframes[indexEnd].time;
 			dbp('fetch:', `index=[${indexStart},${indexEnd}] time=[${ts},${te}]`);
 		}
-
-		let resbuf = [];
-		let fulfill;
-		let xhr;
 
 		let promise = new Promise((_fulfill, reject) => {
 			fulfill = _fulfill;
@@ -223,11 +204,12 @@ class Streams {
 					if (range !== undefined) {
 						xhr.setRequestHeader('Range', range);
 					}
+					dbp('fetch:', `bytes=[${start},${end}]`);
 				}
 				xhr.onerror = reject;
 
-				let onload = ab => {
-					let segbuf = new Uint8Array(ab);
+				xhr.onload = () => {
+					let segbuf = new Uint8Array(xhr.response);
 					let cputimeStart = new Date().getTime();
 					let {buf, duration} = this.transcodeMediaSegments(segbuf, this.streams[range.s].timeStart);
 					let cputimeEnd = new Date().getTime();
@@ -242,10 +224,6 @@ class Streams {
 						fulfill(concatUint8Array(resbuf));
 					}
 				}
-
-				xhr.onload = function(e) {
-					onload(this.response);
-				};
 
 				xhr.send();
 			}
@@ -375,8 +353,6 @@ class Streams {
 	}
 }
 
-app.fetchU8 = (url, opts) => app.fetchAB(url, opts).then(ab => new Uint8Array(ab))
-
 function debounce(func, wait, immediate) {
 	var timeout;
 	return function() {
@@ -435,7 +411,7 @@ app.bindVideo = (opts) => {
 	video.src = URL.createObjectURL(mediaSource);
 
 	let prefetchSession = null;
-	let prefetchMediaSegmentsByTime = (time, len=5) => {
+	let prefetchMediaSegmentsByTime = (time, len=10) => {
 		if (prefetchSession)
 			prefetchSession.cancel();
 		let sess = streams.fetchMediaSegmentsByTime(time, time+len);
