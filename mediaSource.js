@@ -353,18 +353,20 @@ class Streams {
 	}
 }
 
-function debounce(func, wait, immediate) {
-	var timeout;
+function debounce(start, end, interval) {
+	var timer;
 	return function() {
 		var context = this, args = arguments;
 		var later = function() {
-			timeout = null;
-			if (!immediate) func.apply(context, args);
+			timer = null;
+			end.apply(context, args);
 		};
-		var callNow = immediate && !timeout;
-		clearTimeout(timeout);
-		timeout = setTimeout(later, wait);
-		if (callNow) func.apply(context, args);
+		if (timer) {
+			clearTimeout(timer);
+		} else {
+			start.apply(context, args);
+		}
+		timer = setTimeout(later, interval);
 	};
 };
 
@@ -386,7 +388,7 @@ app.bindVideo = (opts) => {
 	let mediaSource = new MediaSource();
 
 	let sourceBuffer;
-	let appendBuffer, removeBuffer, dequeAction;
+	let appendBuffer, removeBuffer, removeAllBuffer, dequeAction;
 	{
 		let queue = [];
 		let enque = fn => {
@@ -397,6 +399,7 @@ app.bindVideo = (opts) => {
 		}
 		appendBuffer = buf => enque(() => sourceBuffer.appendBuffer(buf));
 		removeBuffer = (start,end) => enque(() => sourceBuffer.remove(start,end));
+		removeAllBuffer = () => enque(() => sourceBuffer.remove(0,video.duration));
 		dequeAction = () => {
 			if (queue.length > 0) {
 				queue[0]();
@@ -470,23 +473,31 @@ app.bindVideo = (opts) => {
 		}
 	}
 
-	video.addEventListener('seeking', debounce((e) => {
-		dbp('seeking:', video.currentTime)
+	video.addEventListener('seeking', debounce(() => {
+		dbp('seeking(start):', video.currentTime)
 
 		if (video.currentTime > streams.duration) {
 			dbp('seeking:', 'wait probe done');
-			removeBuffer(0, video.duration);
 			stopPrefetch();
+			removeAllBuffer();
 			needPrefetchTime = video.currentTime;
 			return;
 		}
 
 		if (!timeIsBuffered(video.currentTime)) {
-			dbp('seeking:', 'need prefetch');
-			removeBuffer(0, video.duration);
-			prefetchMediaSegmentsByTime(video.currentTime);
+			stopPrefetch();
+			return;
 		}
-	}, 200))
+	}, () => {
+		dbp('seeking(end):', video.currentTime)
+
+		if (!timeIsBuffered(video.currentTime)) {
+			dbp('seeking:', 'do prefetch');
+			removeAllBuffer();
+			prefetchMediaSegmentsByTime(video.currentTime);
+			return;
+		}
+	}, 200));
 
 	mediaSource.addEventListener('sourceended', () => dbp('mediaSource: sourceended'))
 	mediaSource.addEventListener('sourceclose', () => dbp('mediaSource: sourceclose'))
@@ -511,10 +522,10 @@ app.bindVideo = (opts) => {
 			dbp('bufupdate:', JSON.stringify(ranges), 'time', video.currentTime);
 			
 			if (buffered.length > 0) {
-				if (video.currentTime < buffered.start(0)) {
+				if (video.currentTime < buffered.start(0) || 
+						video.currentTime > buffered.end(buffered.length-1)) 
+				{
 					video.currentTime = buffered.start(0)+0.1;
-				} else if (video.currentTime > buffered.end(buffered.length-1)) {
-					video.currentTime = buffered.end(buffered.length-1)-0.1;
 				}
 			}
 		});
