@@ -12,7 +12,7 @@
 
 打开一个视频页面，点击右上角的图标就可以播放了
 
- <kbd>⌘ + Enter</kbd> 全屏 <kbd>↑ ↓</kbd> 音量 <kbd>← →</kbd> 快进快退 <kbd>M</kbd> 静音
+ <kbd>⌘ + Enter</kbd> 全屏 / <kbd>↑ ↓</kbd> 音量 / <kbd>← →</kbd> 快进快退 / 按<kbd>M</kbd>静音(~~安轨~~)
 
 低于 1080P 的视频建议使用妈妈主计划
 
