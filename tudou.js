@@ -1,6 +1,9 @@
 /*  tudou 
  *  @朱一
  */
+// TODO:
+// cannot play http://www.tudou.com/programs/view/TXBFQYX6F04/ missing vcode
+
 var youku = require('./youku')
 
 exports.testUrl = function (url) {
