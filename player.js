@@ -11,8 +11,8 @@ module.exports = () => {
 	let video = div.querySelector('video');
 	video.autoplay = true;
 	video.controls = true;
-	video.style.position = 'absolute'
-	video.style.display = 'none'
+	video.style.position = 'absolute';
+	video.style.display = 'none';
 
 	let self = {video, div};
 
@@ -40,12 +40,12 @@ module.exports = () => {
 
 	let onStarted = () => {
 		video.style.display = 'block';
-		video.removeEventListener('loadedmetadata', onStarted);
+		video.removeEventListener('canplay', onStarted);
 		resize();
 		if (self.onStarted)
 			self.onStarted();
 	}
-	video.addEventListener('loadedmetadata', onStarted);
+	video.addEventListener('canplay', onStarted);
 
 	let toggleFullScreen = () => {
 		if (!document.webkitFullscreenElement) {
@@ -96,10 +96,10 @@ module.exports = () => {
 
 	let volumeDelta = 0.2;
 	let volumeUp = () => {
-		video.volume += volumeDelta;
+		video.volume = Math.min(1.0, video.volume+volumeDelta);
 	}
 	let volumeDown = () => {
-		video.volume -= volumeDelta;
+		video.volume = Math.max(0, video.volume-volumeDelta);
 	}
 
 	let toggleMute = () => {
@@ -110,33 +110,42 @@ module.exports = () => {
 		switch (e.code) {
 			case "Space": {
 				togglePlayPause();
+				e.preventDefault();
 			} break;
 
 			case "ArrowUp": {
 				volumeUp();
+				e.preventDefault();
 			} break;
 
 			case "KeyM": {
 				toggleMute();
+				e.preventDefault();
 			} break;
 
 			case "ArrowDown": {
 				volumeDown();
+				e.preventDefault();
 			} break;
 
 			case "ArrowLeft": {
 				seekBack();
+				e.preventDefault();
 			} break;
 
 			case "ArrowRight": {
 				seekForward();
+				e.preventDefault();
 			} break;
 
 			case "Enter": {
-				if (e.metaKey || e.ctrlKey)
+				if (e.metaKey || e.ctrlKey) {
 					toggleFullScreen();
+					e.preventDefault();
+				}
 			} break;
 		}
+
 	});
 
 	document.body.style.margin = 0;

@@ -29,10 +29,12 @@ let nanobar = new Nanobar();
 let style = document.createElement('style');
 style.innerHTML = `
 .nanobar .bar {
-	background: #c16c70
+	background: #c16c70;
 }
 .nanobar {
-	z-index: 2999999
+	z-index: 2999999;
+	left: 0px;
+	top: 0px;
 }
 `
 document.head.appendChild(style);
