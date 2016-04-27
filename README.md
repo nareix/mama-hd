@@ -6,13 +6,15 @@
 
 # 使用
 
+[Chrome 商店](https://chrome.google.com/webstore/detail/mama-hd/hoihfdmeofbkbbjpieicemdhmjgfdihm?hl=zh-CN&gl=ID)
+
 [本地安装](https://github.com/nareix/mama-hd/raw/master/mama-hd.crx)（点击 Chrome 右上角选择设置->扩展程序->把刚下载的crx文件拖拽进去）
 
 要求 Chrome 版本大于 48
 
 打开一个视频页面，点击右上角的图标就可以播放了
 
- <kbd>⌘ + Enter</kbd> 全屏 / <kbd>↑ ↓</kbd> 音量 / <kbd>← →</kbd> 快进快退 / <kbd>M</kbd>静音 / <kbd>Space</kbd> 暂停
+ <kbd>⌘ + Enter</kbd> 全屏 / <kbd>↑ ↓</kbd> 音量 / <kbd>← →</kbd> 快进快退 / <kbd>M</kbd> 静音 / <kbd>Space</kbd> 暂停
 
 低于 1080P 的视频建议使用妈妈主计划
 
