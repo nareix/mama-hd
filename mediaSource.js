@@ -2,7 +2,7 @@
 //TODO
 // [DONE] sourceBuffer: opeartion queue
 // [DONE] seek to keyframe problem
-// rewrite fetchMediaSegment
+// [DONE] rewrite fetchMediaSegment
 
 'use strict'
 
@@ -177,6 +177,7 @@ class Streams {
 				range = ranges[ranges.length-1];
 			}
 			range.end = e.rangeEnd;
+			range.streamTimeEnd = this.streams[e.urlIdx].timeEnd;
 			totalSize += e.size;
 		}
 
@@ -257,7 +258,7 @@ class Streams {
 		return mp4mux.initSegment([this.videoTrack, this.audioTrack], this.fakeDuration*mp4mux.timeScale);
 	}
 
-	transcodeMediaSegments(segbuf, timeStart) {
+	transcodeMediaSegments(segbuf, timeStart, timeEnd) {
 		let segpkts = flvdemux.parseMediaSegment(segbuf);
 
 		let lastSample, lastDuration;
@@ -299,11 +300,12 @@ class Streams {
 
 			if (lastSample) {
 				lastSample.duration = sample._dts-lastSample._dts;
-				lastDuration = lastSample.duration;
 			}
 			lastSample = sample;
 			videoTrack.samples.push(sample);
 		});
+		lastSample.duration = timeEnd*mp4mux.timeScale-lastSample._dts;
+
 		// If not set last sample's duration, then audio discontinous problem solved
 		// I don't know why ....
 		//lastSample.duration = lastDuration;
@@ -330,6 +332,7 @@ class Streams {
 			lastSample = sample;
 			audioTrack.samples.push(sample);
 		});
+		lastSample.duration = timeEnd*mp4mux.timeScale-lastSample._dts;
 		//lastSample.duration = lastDuration;
 
 		if (0) {
@@ -476,8 +479,6 @@ app.bindVideo = (opts) => {
 				sourceBuffer.abort();
 
 			let time = video.currentTime;
-			if (fetching && fetching.timeStart <= time && time < fetching.timeEnd)
-				return;
 			stopFetching();
 
 			sourceBuffer.remove(0, video.duration);
