@@ -15,6 +15,8 @@
 
 'use strict'
 
+let localhost = 'http://localhost:6060/'
+
 let mediaSource = require('./mediaSource');
 let Nanobar = require('nanobar');
 let bilibili = require('./bilibili');
@@ -81,7 +83,7 @@ let playUrl = url => {
 let cmd = {};
 
 cmd.testBuggy2Buf = () => {
-	let streams = new mediaSource.Streams(['http://localhost:6060/buggybuf2.flv']);
+	let streams = new mediaSource.Streams([localhost+'buggybuf2.flv']);
 	streams.probe().then(res => {
 		return streams.fetchMediaSegmentsByIndex(74, 77).then(res => {
 		});
@@ -92,7 +94,7 @@ cmd.testBuggy2Buf = () => {
 cmd.testBuggy2Play = () => {
 	cmd.ctrl = playVideo({
 		src:[
-			'http://localhost:6060/buggybuf2.flv',
+			localhost+'buggybuf2.flv',
 		],
 	});
 	setTimeout(() => cmd.ctrl.player.video.currentTime = 350.0, 500);
@@ -100,7 +102,7 @@ cmd.testBuggy2Play = () => {
 
 cmd.fetchDiscontAudio = () => {
 	// at 209.667
-	let streams = new mediaSource.Streams(['http://localhost:6060/discontaudio.flv']);
+	let streams = new mediaSource.Streams([localhost+'discontaudio.flv']);
 	streams.probe().then(res => {
 		return streams.fetchMediaSegmentsByIndex(40,41);
 	}).then(() => {
@@ -111,7 +113,7 @@ cmd.fetchDiscontAudio = () => {
 cmd.playDiscontAudio = () => {
 	cmd.ctrl = playVideo({
 		src:[
-			'http://localhost:6060/discontaudio.flv',
+			localhost+'discontaudio.flv',
 		],
 	});
 	setTimeout(() => cmd.ctrl.player.video.currentTime = 51.0, 400);
@@ -120,10 +122,10 @@ cmd.playDiscontAudio = () => {
 cmd.testPlayerUI = () => {
 	cmd.ctrl = playVideo({
 		src:[
-			'http://localhost:6060/projectindex-0.flv',
-			'http://localhost:6060/projectindex-1.flv',
-			'http://localhost:6060/projectindex-2.flv',
-			'http://localhost:6060/projectindex-3.flv',
+			localhost+'projectindex-0.flv',
+			localhost+'projectindex-1.flv',
+			localhost+'projectindex-2.flv',
+			localhost+'projectindex-3.flv',
 		],
 		duration: 1420.0,
 	});
@@ -152,7 +154,7 @@ cmd.playUrl = url => {
 
 cmd.testXhr = () => {
 	var xhr = new XMLHttpRequest();
-	xhr.open('GET', 'http://localhost:6060/projectindex-0.flv');
+	xhr.open('GET', localhost+'projectindex-0.flv');
 	setTimeout(() => xhr.abort(), 100);
 	xhr.onload = function(e) {
 		console.log(this.status);
@@ -212,6 +214,47 @@ cmd.testfetch = () => {
 	headers.append('Range', 'bytes=0-400000');
 	fetch(`http://27.221.48.172/youku/65723A1CDA44683D499698466F/030001290051222DE95D6C055EEB3EBFDE3F09-E65E-1E0A-218C-3CDFACC4F973.flv`, {headers}).then(res => pump(res.body.getReader()))
 		.then(res => console.log(res));
+}
+
+cmd.testInitSegment = () => {
+	fetch(localhost+'frag_heaac.mp4.fraginfo.json').then(res=>res.json()).then(res => {
+		let headers = new Headers();
+		headers.append('Range', 'bytes=0-'+res.InitSegEnd);
+		return fetch(localhost+'frag_heaac.mp4', {headers}).then(res=>res.arrayBuffer());
+	}).then(res => {
+		res = new Uint8Array(res);
+
+		let mediaSource = new MediaSource();
+		let video = document.createElement('video');
+		document.body.appendChild(video);
+
+		video.src = URL.createObjectURL(mediaSource);
+		video.autoplay = true;
+
+		video.addEventListener('loadedmetadata', () => {
+			console.log('loadedmetadata', video.duration);
+		});
+
+		let sourceBuffer;
+		mediaSource.addEventListener('sourceopen', e => {
+			console.log('sourceopen');
+			if (mediaSource.sourceBuffers.length > 0)
+				return;
+			let codecType = 'video/mp4; codecs="avc1.640029, mp4a.40.05"';
+			sourceBuffer = mediaSource.addSourceBuffer(codecType);
+			sourceBuffer.addEventListener('error', () => dbp('sourceBuffer: error'));
+			sourceBuffer.addEventListener('abort', () => dbp('sourceBuffer: abort'));
+			sourceBuffer.addEventListener('update', () => {
+				console.log('sourceBuffer: update');
+			})
+			sourceBuffer.addEventListener('updateend', () => {
+				console.log('sourceBuffer: updateend')
+			});
+			sourceBuffer.appendBuffer(res);
+		})
+		mediaSource.addEventListener('sourceended', () => dbp('mediaSource: sourceended'))
+		mediaSource.addEventListener('sourceclose', () => dbp('mediaSource: sourceclose'))
+	});
 }
 
 playUrl(location.href);
