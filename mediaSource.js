@@ -8,6 +8,7 @@
 
 let flvdemux = require('./flvdemux')
 let mp4mux = require('./mp4mux')
+let fetch = require('./http').fetch;
 
 let app = {}
 
@@ -63,7 +64,7 @@ class Streams {
 		}
 		let headers = new Headers();
 		headers.append('Range', 'bytes=0-5000000');
-		return fetch(url, {headers}).then(res => {
+		return fetch(url, {headers, retries: 1024}).then(res => {
 			return pump(res.body.getReader())
 		});
 	}
