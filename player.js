@@ -87,11 +87,25 @@ module.exports = () => {
 	}))
 
 	let seekDelta = 5.0;
+	let getSeekTime = (delta) => {
+		let inc = delta>0?1:-1;
+		let index = self.streams.findIndexByTime(video.currentTime);
+		let keyframes = self.streams.keyframes;
+		for (let i = index; i >= 0 && i < keyframes.length; i += inc) {
+			let e = keyframes[i];
+			if (Math.abs(e.timeStart-video.currentTime) > Math.abs(delta)) {
+				index = i;
+				break;
+			}
+		}
+		let time = self.streams.keyframes[index].timeStart;
+		video.currentTime = time;
+	};
 	let seekBack = () => {
-		video.currentTime = self.streams.findNearestIndexTimeByTime(video.currentTime,-seekDelta);
+		video.currentTime = getSeekTime(-seekDelta);
 	}
 	let seekForward = () => {
-		video.currentTime = self.streams.findNearestIndexTimeByTime(video.currentTime,+seekDelta);
+		video.currentTime = getSeekTime(seekDelta);
 	}
 
 	let volumeDelta = 0.2;
