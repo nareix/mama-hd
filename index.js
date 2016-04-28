@@ -10,8 +10,10 @@
 // [OK] open twice
 // [OK] http://www.bilibili.com/video/av3659561/index_57.html: Error: empty range, maybe video end
 // [OK] http://www.bilibili.com/video/av3659561/index_56.html: First segment too small
+// [OK] double buffered problem: http://www.bilibili.com/video/av4467810/
+// [OK] double buffered problem: http://www.bilibili.com/video/av3791945/ 
+// 	   [[2122.957988,2162.946522],[2163.041988,2173.216033]]
 // http://www.bilibili.com/video/av1753789/: mediaSource: sourceclose,Failed to execute 'appendBuffer' on 'SourceBuffer'
-// double buffered problem: http://www.bilibili.com/video/av4467810/
 
 'use strict'
 
@@ -82,24 +84,6 @@ let playUrl = url => {
 
 let cmd = {};
 
-cmd.testBuggy2Buf = () => {
-	let streams = new mediaSource.Streams([localhost+'buggybuf2.flv']);
-	streams.probe().then(res => {
-		return streams.fetchMediaSegmentsByIndex(74, 77).then(res => {
-		});
-	}).then(res => {
-	})
-}
-
-cmd.testBuggy2Play = () => {
-	cmd.ctrl = playVideo({
-		src:[
-			localhost+'buggybuf2.flv',
-		],
-	});
-	setTimeout(() => cmd.ctrl.player.video.currentTime = 350.0, 500);
-}
-
 cmd.fetchDiscontAudio = () => {
 	// at 209.667
 	let streams = new mediaSource.Streams([localhost+'discontaudio.flv']);
@@ -167,13 +151,24 @@ cmd.testXhr = () => {
 }
 
 cmd.testWriteFile = () => {
-	chrome.fileSystem.chooseEntry({type:'saveFile'}, (file) => {
-		file.createWriter(writer => {
-			writer.onwrittend = () => console.log('write complete');
-			let u8 = new Uint8Array([1,2,3,4]);
-			writer.write(u8);
-		});
-	});
+	let errfunc = e => console.error(e);
+	webkitRequestFileSystem(TEMPORARY, 1*1024*1024*1024, fs => {
+		fs.root.getFile('tmp.bin', {create:true}, file => {
+			file.createWriter(writer => {
+				writer.onwrittend = () => console.log('write complete');
+				//writer.truncate(1024*1024);
+				for (let i = 0; i < 1024*1024*10; i++) {
+					let u8 = new Uint8Array([0x65,0x65,0x65,0x65]);
+					writer.write(new Blob([u8]));
+				}
+				let a = document.createElement('a');
+				a.href = file.toURL();
+				a.download = 'a.txt';
+				document.body.appendChild(a);
+				a.click();
+			});
+		}, errfunc);
+	}, errfunc);
 }
 
 cmd.fetchMediacloseBugVideo= () => {
