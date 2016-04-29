@@ -172,13 +172,15 @@ class Streams {
 			let range;
 			if (ranges.length == 0 || ranges[ranges.length-1].url != url) {
 				range = {url, start:e.rangeStart, end:e.rangeEnd};
-				range.streamTimeStart = this.streams[e.urlIdx].timeStart;
+				range.streamTimeBase = this.streams[e.urlIdx].timeStart;
+				range.timeStart = e.timeStart;
 				ranges.push(range);
 			} else {
 				range = ranges[ranges.length-1];
 			}
 			range.end = e.rangeEnd;
-			range.streamTimeEnd = this.streams[e.urlIdx].timeEnd;
+			range.timeEnd = e.timeEnd;
+			range.duration = range.timeEnd-range.timeStart;
 			totalSize += e.size;
 		}
 
@@ -187,7 +189,8 @@ class Streams {
 
 		let timeStart = this.keyframes[indexStart].timeStart;
 		let timeEnd = this.keyframes[indexEnd].timeEnd;
-		dbp('fetch:', `index=[${indexStart},${indexEnd}] time=[${timeStart},${timeEnd}] size=${totalSize/1e6}M`);
+		dbp('fetch:', `index=[${indexStart},${indexEnd}] `+
+									`time=[${timeStart},${timeEnd}] size=${totalSize/1e6}M range.nr=${ranges.length}`);
 
 		let resbuf = [];
 		let fulfill;
@@ -224,11 +227,11 @@ class Streams {
 				xhr.onload = () => {
 					let segbuf = new Uint8Array(xhr.response);
 					let cputimeStart = new Date().getTime();
-					let {buf, duration} = this.transcodeMediaSegments(segbuf, range.streamTimeStart);
+					let buf = this.transcodeMediaSegments(segbuf, range.streamTimeBase, range.timeEnd);
 					let cputimeEnd = new Date().getTime();
 					dbp('transcode: cputime(ms):', (cputimeEnd-cputimeStart), 
 							'segbuf(MB)', segbuf.byteLength/1e6,
-							'videotime(s)', duration
+							'videotime(s)', range.duration
 						 );
 					resbuf.push(buf);
 					if (i+1 < ranges.length) {
@@ -259,8 +262,9 @@ class Streams {
 		return mp4mux.initSegment([this.videoTrack, this.audioTrack], this.fakeDuration*mp4mux.timeScale);
 	}
 
-	transcodeMediaSegments(segbuf, timeStart, timeEnd) {
+	transcodeMediaSegments(segbuf, streamTimeBase, timeEnd) {
 		let segpkts = flvdemux.parseMediaSegment(segbuf);
+		dbp(`transcode: segbuf.len=${segbuf.byteLength}`);
 
 		let lastSample, lastDuration;
 		let videoTrack = this.videoTrack;
@@ -281,9 +285,9 @@ class Streams {
 			videoTrack._mdatSize += sample.size;
 
 			if (videoTrack.baseMediaDecodeTime === undefined) {
-				videoTrack.baseMediaDecodeTime = (pkt.dts+timeStart)*mp4mux.timeScale;
+				videoTrack.baseMediaDecodeTime = (pkt.dts+streamTimeBase)*mp4mux.timeScale;
 			}
-			sample._dts = pkt.dts*mp4mux.timeScale;
+			sample._dts = pkt.dts;
 			sample.compositionTimeOffset = pkt.cts*mp4mux.timeScale;
 
 			//dbp('timeStart', timeStart)
@@ -300,12 +304,13 @@ class Streams {
 			};
 
 			if (lastSample) {
-				lastSample.duration = sample._dts-lastSample._dts;
+				lastSample.duration = (sample._dts-lastSample._dts)*mp4mux.timeScale;
 			}
 			lastSample = sample;
 			videoTrack.samples.push(sample);
 		});
-		lastSample.duration = timeEnd*mp4mux.timeScale-lastSample._dts;
+		lastSample.duration = ((timeEnd-streamTimeBase)-lastSample._dts)*mp4mux.timeScale;
+		dbp(`lastSample.duration=${lastSample.duration/mp4mux.timeScale}`);
 
 		// If not set last sample's duration, then audio discontinous problem solved
 		// I don't know why ....
@@ -322,19 +327,19 @@ class Streams {
 			//dbp('audiosample', pkt.dts, pkt.frame.byteLength);
 
 			if (audioTrack.baseMediaDecodeTime === undefined) {
-				audioTrack.baseMediaDecodeTime = (pkt.dts+timeStart)*mp4mux.timeScale;
+				audioTrack.baseMediaDecodeTime = (pkt.dts+streamTimeBase)*mp4mux.timeScale;
 			}
-			sample._dts = pkt.dts*mp4mux.timeScale;
+			sample._dts = pkt.dts;
 
 			if (lastSample) {
-				lastSample.duration = sample._dts-lastSample._dts;
+				lastSample.duration = (sample._dts-lastSample._dts)*mp4mux.timeScale;
 				lastDuration = lastSample.duration;
 			}
 			lastSample = sample;
 			audioTrack.samples.push(sample);
 		});
-		lastSample.duration = timeEnd*mp4mux.timeScale-lastSample._dts;
-		//lastSample.duration = lastDuration;
+		lastSample.duration = lastDuration;
+		dbp(`lastSample.duration=${lastSample.duration/mp4mux.timeScale}`);
 
 		if (0) {
 			let sumup = x => x.samples.reduce((val,e) => val+e.duration, 0);
@@ -361,7 +366,7 @@ class Streams {
 		mdat = mp4mux.mdat(_mdat);
 		list = list.concat([moof, mdat]);
 
-		return {buf:concatUint8Array(list), duration:segpkts[segpkts.length-1].dts-segpkts[0].dts};
+		return concatUint8Array(list);
 	}
 }
 
@@ -513,10 +518,6 @@ app.bindVideo = (opts) => {
 		}
 	}, 200));
 
-	video.addEventListener('timeupdate', triggerPerNr(() => {
-		tryPrefetch();
-	}, 6));
-
 	mediaSource.addEventListener('sourceended', () => dbp('mediaSource: sourceended'))
 	mediaSource.addEventListener('sourceclose', () => dbp('mediaSource: sourceclose'))
 
@@ -560,6 +561,9 @@ app.bindVideo = (opts) => {
 
 		video.addEventListener('loadedmetadata', () => {
 			tryPrefetch(5.0);
+			setInterval(() => {
+				tryPrefetch();
+			}, 1500);
 		});
 	});
 
