@@ -14,7 +14,6 @@
 // [OK] double buffered problem: http://www.bilibili.com/video/av3791945/ 
 // 	   [[2122.957988,2162.946522],[2163.041988,2173.216033]]
 // InitSegment invalid: http://www.bilibili.com/video/av1753789 
-// [OK] discontinous audio bug: http://v.youku.com/v_show/id_XMTU1MTk3NzMzNg==.html 6:49: bug from source
 
 'use strict'
 

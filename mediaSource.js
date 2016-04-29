@@ -227,7 +227,7 @@ class Streams {
 				xhr.onload = () => {
 					let segbuf = new Uint8Array(xhr.response);
 					let cputimeStart = new Date().getTime();
-					let buf = this.transcodeMediaSegments(segbuf, range.streamTimeBase, range.timeEnd);
+					let buf = this.transcodeMediaSegments(segbuf, range);
 					let cputimeEnd = new Date().getTime();
 					dbp('transcode: cputime(ms):', (cputimeEnd-cputimeStart), 
 							'segbuf(MB)', segbuf.byteLength/1e6,
@@ -262,17 +262,18 @@ class Streams {
 		return mp4mux.initSegment([this.videoTrack, this.audioTrack], this.fakeDuration*mp4mux.timeScale);
 	}
 
-	transcodeMediaSegments(segbuf, streamTimeBase, timeEnd) {
+	transcodeMediaSegments(segbuf, range) {
 		let segpkts = flvdemux.parseMediaSegment(segbuf);
-		dbp(`transcode: segbuf.len=${segbuf.byteLength}`);
 
 		let lastSample, lastDuration;
 		let videoTrack = this.videoTrack;
 		let audioTrack = this.audioTrack;
 
+		videoTrack._samplesDuration = 0;
 		videoTrack._mdatSize = 0;
 		videoTrack.samples = [];
 		delete videoTrack.baseMediaDecodeTime;
+		audioTrack._samplesDuration = 0;
 		audioTrack._mdatSize = 0;
 		audioTrack.samples = [];
 		delete audioTrack.baseMediaDecodeTime;
@@ -285,7 +286,7 @@ class Streams {
 			videoTrack._mdatSize += sample.size;
 
 			if (videoTrack.baseMediaDecodeTime === undefined) {
-				videoTrack.baseMediaDecodeTime = (pkt.dts+streamTimeBase)*mp4mux.timeScale;
+				videoTrack.baseMediaDecodeTime = (range.timeStart)*mp4mux.timeScale;
 			}
 			sample._dts = pkt.dts;
 			sample.compositionTimeOffset = pkt.cts*mp4mux.timeScale;
@@ -305,15 +306,17 @@ class Streams {
 
 			if (lastSample) {
 				lastSample.duration = (sample._dts-lastSample._dts)*mp4mux.timeScale;
+				videoTrack._samplesDuration += lastSample.duration;
 			}
 			lastSample = sample;
 			videoTrack.samples.push(sample);
 		});
-		lastSample.duration = ((timeEnd-streamTimeBase)-lastSample._dts)*mp4mux.timeScale;
-		dbp(`lastSample.duration=${lastSample.duration/mp4mux.timeScale}`);
+		lastSample.duration = range.duration*mp4mux.timeScale-videoTrack._samplesDuration;
+		//dbp(`video.lastSample.duration=${lastSample.duration/mp4mux.timeScale}`);
 
 		// If not set last sample's duration, then audio discontinous problem solved
-		// I don't know why ....
+		// I don't know why .... 
+		// now I don't use this method
 		//lastSample.duration = lastDuration;
 
 		lastSample = null;
@@ -327,19 +330,19 @@ class Streams {
 			//dbp('audiosample', pkt.dts, pkt.frame.byteLength);
 
 			if (audioTrack.baseMediaDecodeTime === undefined) {
-				audioTrack.baseMediaDecodeTime = (pkt.dts+streamTimeBase)*mp4mux.timeScale;
+				audioTrack.baseMediaDecodeTime = (range.timeStart)*mp4mux.timeScale;
 			}
 			sample._dts = pkt.dts;
 
 			if (lastSample) {
 				lastSample.duration = (sample._dts-lastSample._dts)*mp4mux.timeScale;
-				lastDuration = lastSample.duration;
+				audioTrack._samplesDuration += lastSample.duration;
 			}
 			lastSample = sample;
 			audioTrack.samples.push(sample);
 		});
-		lastSample.duration = lastDuration;
-		dbp(`lastSample.duration=${lastSample.duration/mp4mux.timeScale}`);
+		lastSample.duration = range.duration*mp4mux.timeScale-audioTrack._samplesDuration;
+		//dbp(`audio.lastSample.duration=${lastSample.duration/mp4mux.timeScale}`);
 
 		if (0) {
 			let sumup = x => x.samples.reduce((val,e) => val+e.duration, 0);
@@ -349,6 +352,15 @@ class Streams {
 			dbp('audio.duration:', sumup(audioTrack)/mp4mux.timeScale);
 			dbp('video.baseMediaDecodeTime:', videoTrack.baseMediaDecodeTime/mp4mux.timeScale)
 			dbp('audio.baseMediaDecodeTime:', audioTrack.baseMediaDecodeTime/mp4mux.timeScale)
+			dbp('video.duration+base:', (sumup(videoTrack)+videoTrack.baseMediaDecodeTime)/mp4mux.timeScale);
+			dbp('audio.duration+base:', (sumup(audioTrack)+audioTrack.baseMediaDecodeTime)/mp4mux.timeScale);
+		}
+
+		if (0) {
+			dbp('video.firstdts',videoTrack.samples[0]._dts+range.streamTimeBase);
+			dbp('audio.firstdts',audioTrack.samples[0]._dts+range.streamTimeBase);
+			dbp('video.lastdts',videoTrack.samples[videoTrack.samples.length-1]._dts+range.streamTimeBase);
+			dbp('audio.lastdts',audioTrack.samples[audioTrack.samples.length-1]._dts+range.streamTimeBase);
 		}
 
 		let moof, _mdat, mdat;
