@@ -81,12 +81,12 @@ var extractFlvPath = exports.extractFlvPath = function(info) {
 }
 
 var getVideosByVideoId = exports.getVideosByVideoId = function (vid) {
-	var headers = new Headers();
-	headers.append('sethdr-Referer', 'http://static.youku.com/');
-	headers.append('sethdr-Cookie', '__ysuid'+new Date().getTime()/1e3);
+	//var headers = new Headers();
+	//headers.append('sethdr-Referer', 'http://static.youku.com/');
+	//headers.append('sethdr-Cookie', '__ysuid'+new Date().getTime()/1e3);
 	return Promise.all([
-		fetch('http://play.youku.com/play/get.json?vid='+vid+'&ct=10', {headers}).then(res => res.json()),
-		fetch('http://play.youku.com/play/get.json?vid='+vid+'&ct=12', {headers}).then(res => res.json()),
+		fetch('http://play.youku.com/play/get.json?vid='+vid+'&ct=10', {credentials: 'include'}).then(res => res.json()),
+		fetch('http://play.youku.com/play/get.json?vid='+vid+'&ct=12', {credentials: 'include'}).then(res => res.json()),
 	]).then(res => {
 		var data10 = res[0].data;
 		var data12 = res[1].data;
