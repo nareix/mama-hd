@@ -215,12 +215,15 @@ dinf = function() {
 esds = function(track) {
 	var AudioSpecificConfig;
 	if (track.AudioSpecificConfig)
-		AudioSpecificConfig = track.AudioSpecificConfig;
+		AudioSpecificConfig = Array.prototype.slice.call(track.AudioSpecificConfig);
 	else
 		AudioSpecificConfig = [
 			(track.audioobjecttype << 3) | (track.samplingfrequencyindex >>> 1),
 			(track.samplingfrequencyindex << 7) | (track.channelcount << 3),
 		];
+
+	// ISO/IEC 14496-3, AudioSpecificConfig
+	// for samplingFrequencyIndex see ISO/IEC 13818-7:2006, 8.1.3.2.2, Table 35
 
   return box(types.esds, new Uint8Array([
     0x00, // version
@@ -228,13 +231,13 @@ esds = function(track) {
 
     // ES_Descriptor
     0x03, // tag, ES_DescrTag
-    0x19, // length
+    0x17+AudioSpecificConfig.length, // length
     0x00, 0x00, // ES_ID
     0x00, // streamDependenceFlag, URL_flag, reserved, streamPriority
 
     // DecoderConfigDescriptor
     0x04, // tag, DecoderConfigDescrTag
-    0x11, // length
+    0x0f+AudioSpecificConfig.length, // length
     0x40, // object type
     0x15,  // streamType
     0x00, 0x06, 0x00, // bufferSizeDB
@@ -243,13 +246,10 @@ esds = function(track) {
 
     // DecoderSpecificInfo
     0x05, // tag, DecoderSpecificInfoTag
-    0x02, // length
-    // ISO/IEC 14496-3, AudioSpecificConfig
-    // for samplingFrequencyIndex see ISO/IEC 13818-7:2006, 8.1.3.2.2, Table 35
-		AudioSpecificConfig[0], AudioSpecificConfig[1],
-
+    AudioSpecificConfig.length, // length
+	].concat(AudioSpecificConfig).concat([
     0x06, 0x01, 0x02 // GASpecificConfig
-  ]));
+  ])));
 };
 
 ftyp = function() {
