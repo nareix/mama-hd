@@ -3,6 +3,7 @@
 // [DONE] sourceBuffer: opeartion queue
 // [DONE] seek to keyframe problem
 // [DONE] rewrite fetchMediaSegment
+// seeking start seeking end cb, when seeking not end bufupdate not seek
 
 'use strict'
 
@@ -174,10 +175,12 @@ class Streams {
 				range = {url, start:e.rangeStart, end:e.rangeEnd};
 				range.streamTimeBase = this.streams[e.urlIdx].timeStart;
 				range.timeStart = e.timeStart;
+				range.indexStart = i;
 				ranges.push(range);
 			} else {
 				range = ranges[ranges.length-1];
 			}
+			range.indexEnd = i;
 			range.end = e.rangeEnd;
 			range.timeEnd = e.timeEnd;
 			range.duration = range.timeEnd-range.timeStart;
@@ -229,7 +232,7 @@ class Streams {
 					let cputimeStart = new Date().getTime();
 					let buf = this.transcodeMediaSegments(segbuf, range);
 					let cputimeEnd = new Date().getTime();
-					dbp('transcode: cputime(ms):', (cputimeEnd-cputimeStart), 
+					dbp('transcode:', `[${range.indexStart},${range.indexEnd}]`, 'cputime(ms):', (cputimeEnd-cputimeStart), 
 							'segbuf(MB)', segbuf.byteLength/1e6,
 							'videotime(s)', range.duration
 						 );
@@ -265,19 +268,30 @@ class Streams {
 	transcodeMediaSegments(segbuf, range) {
 		let segpkts = flvdemux.parseMediaSegment(segbuf);
 
-		let lastSample, lastDuration;
+		let lastSample, lastDuration, duration;
 		let videoTrack = this.videoTrack;
 		let audioTrack = this.audioTrack;
 
-		videoTrack._samplesDuration = 0;
+		// baseMediaDecodeTime=firstpacket.time [video][video][video][video] nextkeyframe.time
+		// baseMediaDecodeTime=firstpacket.time [audio][audio][audio][audio] keyframe.time+aac_total_duration
+
+		if (this._lastTranscodeRangeEndIndex !== undefined && 
+				this._lastTranscodeRangeEndIndex+1 === range.indexStart) {
+			audioTrack._firstTime = audioTrack._lastTime;
+			videoTrack._firstTime = videoTrack._lastTime;
+		} else {
+			delete audioTrack._firstTime;
+			delete videoTrack._firstTime;
+		}
+		this._lastTranscodeRangeEndIndex = range.indexEnd;
+
 		videoTrack._mdatSize = 0;
 		videoTrack.samples = [];
-		delete videoTrack.baseMediaDecodeTime;
-		audioTrack._samplesDuration = 0;
 		audioTrack._mdatSize = 0;
 		audioTrack.samples = [];
-		delete audioTrack.baseMediaDecodeTime;
 
+		lastSample = null;
+		duration = 0;
 		segpkts.filter(pkt => pkt.type == 'video' && pkt.NALUs).forEach((pkt, i) => {
 			let sample = {};
 			sample._data = pkt.NALUs;
@@ -285,14 +299,11 @@ class Streams {
 			sample.size = sample._data.byteLength;
 			videoTrack._mdatSize += sample.size;
 
-			if (videoTrack.baseMediaDecodeTime === undefined) {
-				videoTrack.baseMediaDecodeTime = (range.timeStart)*mp4mux.timeScale;
+			if (videoTrack._firstTime === undefined) {
+				videoTrack._firstTime = pkt.dts+range.streamTimeBase;
 			}
 			sample._dts = pkt.dts;
 			sample.compositionTimeOffset = pkt.cts*mp4mux.timeScale;
-
-			//dbp('timeStart', timeStart)
-			//dbp('videosample', pkt.dts, pkt.isKeyFrame);
 
 			sample.flags = {
 				isLeading: 0,
@@ -305,21 +316,18 @@ class Streams {
 			};
 
 			if (lastSample) {
-				lastSample.duration = (sample._dts-lastSample._dts)*mp4mux.timeScale;
-				videoTrack._samplesDuration += lastSample.duration;
+				let diff = sample._dts-lastSample._dts;
+				lastSample.duration = diff*mp4mux.timeScale;
+				duration += diff;
 			}
 			lastSample = sample;
 			videoTrack.samples.push(sample);
 		});
-		lastSample.duration = range.duration*mp4mux.timeScale-videoTrack._samplesDuration;
-		//dbp(`video.lastSample.duration=${lastSample.duration/mp4mux.timeScale}`);
-
-		// If not set last sample's duration, then audio discontinous problem solved
-		// I don't know why .... 
-		// now I don't use this method
-		//lastSample.duration = lastDuration;
+		lastSample.duration = (range.duration-duration)*mp4mux.timeScale;
+		videoTrack._lastTime = range.timeEnd;
 
 		lastSample = null;
+		duration = 0;
 		segpkts.filter(pkt => pkt.type == 'audio' && pkt.frame).forEach((pkt, i) => {
 			let sample = {};
 			sample._data = pkt.frame;
@@ -329,38 +337,32 @@ class Streams {
 
 			//dbp('audiosample', pkt.dts, pkt.frame.byteLength);
 
-			if (audioTrack.baseMediaDecodeTime === undefined) {
-				audioTrack.baseMediaDecodeTime = (range.timeStart)*mp4mux.timeScale;
+			if (audioTrack._firstTime === undefined) {
+				audioTrack._firstTime = pkt.dts+range.streamTimeBase;
 			}
 			sample._dts = pkt.dts;
 
 			if (lastSample) {
-				lastSample.duration = (sample._dts-lastSample._dts)*mp4mux.timeScale;
-				audioTrack._samplesDuration += lastSample.duration;
+				let diff = sample._dts-lastSample._dts;
+				lastSample.duration = diff*mp4mux.timeScale;
+				duration += diff;
+				lastDuration = diff;
 			}
 			lastSample = sample;
 			audioTrack.samples.push(sample);
 		});
-		lastSample.duration = range.duration*mp4mux.timeScale-audioTrack._samplesDuration;
-		//dbp(`audio.lastSample.duration=${lastSample.duration/mp4mux.timeScale}`);
+		lastSample.duration = lastDuration*mp4mux.timeScale;
+		audioTrack._lastTime = duration+lastDuration+audioTrack._firstTime;
 
-		if (0) {
-			let sumup = x => x.samples.reduce((val,e) => val+e.duration, 0);
-			dbp('audio.samplesCount',audioTrack.samples.length);
-			dbp('video.samplesCount',videoTrack.samples.length);
-			dbp('video.duration:', sumup(videoTrack)/mp4mux.timeScale);
-			dbp('audio.duration:', sumup(audioTrack)/mp4mux.timeScale);
-			dbp('video.baseMediaDecodeTime:', videoTrack.baseMediaDecodeTime/mp4mux.timeScale)
-			dbp('audio.baseMediaDecodeTime:', audioTrack.baseMediaDecodeTime/mp4mux.timeScale)
-			dbp('video.duration+base:', (sumup(videoTrack)+videoTrack.baseMediaDecodeTime)/mp4mux.timeScale);
-			dbp('audio.duration+base:', (sumup(audioTrack)+audioTrack.baseMediaDecodeTime)/mp4mux.timeScale);
-		}
+		videoTrack.baseMediaDecodeTime = videoTrack._firstTime*mp4mux.timeScale;
+		audioTrack.baseMediaDecodeTime = audioTrack._firstTime*mp4mux.timeScale;
 
-		if (0) {
-			dbp('video.firstdts',videoTrack.samples[0]._dts+range.streamTimeBase);
-			dbp('audio.firstdts',audioTrack.samples[0]._dts+range.streamTimeBase);
-			dbp('video.lastdts',videoTrack.samples[videoTrack.samples.length-1]._dts+range.streamTimeBase);
-			dbp('audio.lastdts',audioTrack.samples[audioTrack.samples.length-1]._dts+range.streamTimeBase);
+		if (1) {
+			let totdur = x => x.samples.reduce((val,e) => val+e.duration, 0);
+			dbp('av.samplesCount',audioTrack.samples.length, videoTrack.samples.length);
+			dbp('av.duration:', totdur(audioTrack)/mp4mux.timeScale,totdur(videoTrack)/mp4mux.timeScale);
+			dbp('av.firstTime:', audioTrack._firstTime, videoTrack._firstTime);
+			dbp('av.lastTime:', audioTrack._lastTime, videoTrack._lastTime);
 		}
 
 		let moof, _mdat, mdat;
