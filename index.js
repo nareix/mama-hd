@@ -13,7 +13,13 @@
 // [OK] double buffered problem: http://www.bilibili.com/video/av4467810/
 // [OK] double buffered problem: http://www.bilibili.com/video/av3791945/ 
 // 	   [[2122.957988,2162.946522],[2163.041988,2173.216033]]
-// InitSegment invalid: http://www.bilibili.com/video/av1753789 
+// video reset problem: http://www.bilibili.com/video/av314/
+// video stuck problem: http://www.tudou.com/albumplay/-3O0GyT_JkQ/Az5cnjgva4k.html 16:11
+// [OK] InitSegment invalid: http://www.bilibili.com/video/av1753789 
+
+// Test needed for safari: 
+//    xhr cross origin, change referer header, pass arraybuffer efficiency,
+//    mse playing
 
 'use strict'
 
@@ -92,6 +98,15 @@ cmd.fetchDiscontAudio = () => {
 	}).then(() => {
 		return streams.fetchMediaSegmentsByIndex(41,42);
 	})
+}
+
+cmd.playSingleFlv = (url, duration) => {
+	cmd.ctrl = playVideo({
+		src:[
+			localhost+url,
+		],
+		duration,
+	});
 }
 
 cmd.playDiscontAudio = () => {
@@ -212,10 +227,18 @@ cmd.testfetch = () => {
 }
 
 cmd.testInitSegment = () => {
-	fetch(localhost+'frag_heaac.mp4.fraginfo.json').then(res=>res.json()).then(res => {
+	let dbp = console.log.bind(console)
+
+	let meta;
+	let fetchseg = seg => {
 		let headers = new Headers();
-		headers.append('Range', 'bytes=0-'+res.InitSegEnd);
-		return fetch(localhost+'frag_heaac.mp4', {headers}).then(res=>res.arrayBuffer());
+		headers.append('Range', `bytes=${seg.offset}-${seg.offset+seg.size-1}`);
+		return fetch(localhost+'test-fragmented.mp4', {headers}).then(res=>res.arrayBuffer());
+	}
+
+	fetch(localhost+'test-fragmented-manifest.json').then(res=>res.json()).then(res => {
+		meta = res;
+		dbp('meta', meta);
 	}).then(res => {
 		res = new Uint8Array(res);
 
@@ -227,28 +250,43 @@ cmd.testInitSegment = () => {
 		video.autoplay = true;
 
 		video.addEventListener('loadedmetadata', () => {
-			console.log('loadedmetadata', video.duration);
+			dbp('loadedmetadata', video.duration);
 		});
 
 		let sourceBuffer;
 		mediaSource.addEventListener('sourceopen', e => {
-			console.log('sourceopen');
+			dbp('sourceopen');
 			if (mediaSource.sourceBuffers.length > 0)
 				return;
-			let codecType = 'video/mp4; codecs="avc1.640029, mp4a.40.05"';
+			let codecType = meta.type;
 			sourceBuffer = mediaSource.addSourceBuffer(codecType);
+			sourceBuffer.mode = 'sequence';
 			sourceBuffer.addEventListener('error', () => dbp('sourceBuffer: error'));
 			sourceBuffer.addEventListener('abort', () => dbp('sourceBuffer: abort'));
 			sourceBuffer.addEventListener('update', () => {
-				console.log('sourceBuffer: update');
+				dbp('sourceBuffer: update');
 			})
 			sourceBuffer.addEventListener('updateend', () => {
-				console.log('sourceBuffer: updateend')
+				let ranges = [];
+				let buffered = sourceBuffer.buffered;
+				for (let i = 0; i < buffered.length; i++) {
+					ranges.push([buffered.start(i), buffered.end(i)]);
+				}
+				dbp('sourceBuffer: updateend');
+				dbp('buffered', JSON.stringify(ranges), 'duration', video.duration);
 			});
-			sourceBuffer.appendBuffer(res);
+			fetchseg(meta.init).then(() => {
+				sourceBuffer.appendBuffer(res);
+				return fetchseg(meta.media[1]).then(res => {
+					dbp(res.byteLength);
+					sourceBuffer.appendBuffer(res);
+				});
+			});
 		})
 		mediaSource.addEventListener('sourceended', () => dbp('mediaSource: sourceended'))
 		mediaSource.addEventListener('sourceclose', () => dbp('mediaSource: sourceclose'))
+	}).catch(e => {
+		console.error(e);
 	});
 }
 
