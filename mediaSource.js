@@ -63,9 +63,7 @@ class Streams {
 				}
 			});
 		}
-		let headers = new Headers();
-		headers.append('Range', 'bytes=0-5000000');
-		return fetch(url, {headers, retries: 1024}).then(res => {
+		return fetch(url, {headers: {Range: 'bytes=0-5000000'}, retries: 1024}).then(res => {
 			return pump(res.body.getReader())
 		});
 	}
