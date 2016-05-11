@@ -14,7 +14,7 @@ module.exports = () => {
 	video.style.position = 'absolute';
 	video.style.display = 'none';
 
-	let self = {video, div};
+	let self = {video, div, onStarted: [], onSuspend: [], onResume: []};
 
 	let resize = () => {
 		let windowRatio = window.innerHeight/window.innerWidth;
@@ -42,8 +42,7 @@ module.exports = () => {
 		video.style.display = 'block';
 		video.removeEventListener('canplay', onStarted);
 		resize();
-		if (self.onStarted)
-			self.onStarted();
+		self.onStarted.forEach(cb => cb());
 	}
 	video.addEventListener('canplay', onStarted);
 
@@ -55,11 +54,48 @@ module.exports = () => {
 		}
 	}
 
-	let togglePlayPause = () => {
-		if (video.paused)
-			video.play();
-		else
-			video.pause();
+	let togglePlayPause;
+	{
+		let playing = false;
+		let timer;
+
+		let setToPaused = () => {
+			if (playing) {
+				playing = false;
+				self.onSuspend.forEach(x => x());
+				console.log('player: suspend');
+			}
+		}
+
+		let setToPlaying = () => {
+			if (!playing) {
+				playing = true;
+				self.onResume.forEach(x => x());
+				console.log('player: resume');
+			}
+		}
+
+		video.addEventListener('timeupdate', () => {
+			if (video.paused)
+				return;
+			setToPlaying();
+			if (timer) {
+				clearTimeout(timer);
+			}
+			timer = setTimeout(() => {
+				setToPaused();
+				timer = null;
+			}, 1000);
+		});
+
+		togglePlayPause = () => {
+			if (video.paused) {
+				video.play();
+			} else {
+				video.pause();
+				setToPaused();
+			}
+		}
 	}
 
 	function doubleclick(el, onsingle, ondouble) {
