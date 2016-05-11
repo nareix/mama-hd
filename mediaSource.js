@@ -4,6 +4,7 @@
 // [DONE] seek to keyframe problem
 // [DONE] rewrite fetchMediaSegment
 // seeking start seeking end cb, when seeking not end bufupdate not seek
+// [DONE] xhr retry
 
 'use strict'
 
@@ -223,7 +224,9 @@ class Streams {
 						xhr.setRequestHeader('Range', range);
 					}
 				}
-				xhr.onerror = reject;
+				xhr.onerror = () => {
+					setTimeout(() => request(i), 2000);
+				}
 
 				xhr.onload = () => {
 					let segbuf = new Uint8Array(xhr.response);
@@ -355,7 +358,7 @@ class Streams {
 		videoTrack.baseMediaDecodeTime = videoTrack._firstTime*mp4mux.timeScale;
 		audioTrack.baseMediaDecodeTime = audioTrack._firstTime*mp4mux.timeScale;
 
-		if (1) {
+		if (0) {
 			let totdur = x => x.samples.reduce((val,e) => val+e.duration, 0);
 			dbp('av.samplesCount',audioTrack.samples.length, videoTrack.samples.length);
 			dbp('av.duration:', totdur(audioTrack)/mp4mux.timeScale,totdur(videoTrack)/mp4mux.timeScale);
@@ -416,7 +419,7 @@ app.bindVideo = (opts) => {
 	let mediaSource = new MediaSource();
 	video.src = URL.createObjectURL(mediaSource);
 
-	let self = {mediaSource, streams};
+	let self = {mediaSource, streams, onSeek: []};
 
 	let sourceBuffer;
 	let sourceBufferOnUpdateend;
@@ -524,10 +527,13 @@ app.bindVideo = (opts) => {
 	}
 
 	video.addEventListener('seeking', debounce(() => {
-		dbp('seeking:', video.currentTime);
 		if (!currentTimeIsBuffered()) {
+			dbp('seeking(not buffered):', video.currentTime);
 			clearBufferAndPrefetch();
+		} else {
+			dbp('seeking(buffered):', video.currentTime);
 		}
+		self.onSeek.forEach(x => x());
 	}, 200));
 
 	mediaSource.addEventListener('sourceended', () => dbp('mediaSource: sourceended'))
