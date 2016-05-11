@@ -13,9 +13,10 @@
 // [OK] double buffered problem: http://www.bilibili.com/video/av4467810/
 // [OK] double buffered problem: http://www.bilibili.com/video/av3791945/ 
 // 	   [[2122.957988,2162.946522],[2163.041988,2173.216033]]
-// video reset problem: http://www.bilibili.com/video/av314/
-// video stuck problem: http://www.tudou.com/albumplay/-3O0GyT_JkQ/Az5cnjgva4k.html 16:11
+// [OK] video reset problem: http://www.bilibili.com/video/av314/
+// [OK] video stuck problem: http://www.tudou.com/albumplay/-3O0GyT_JkQ/Az5cnjgva4k.html 16:11
 // [OK] InitSegment invalid: http://www.bilibili.com/video/av1753789 
+// EOF error at index 67 http://www.bilibili.com/video/av4593775/
 
 // Test needed for safari: 
 //    xhr cross origin, change referer header, pass arraybuffer efficiency,
@@ -33,6 +34,7 @@ let tudou = require('./tudou');
 let createPlayer = require('./player');
 let flashBlocker = require('./flashBlocker');
 let flvdemux = require('./flvdemux');
+let Damoo = require('./damoo');
 
 let nanobar = new Nanobar();
 
@@ -67,72 +69,153 @@ let playVideo = res => {
 	return {player, media};
 }
 
-let playUrl = url => {
-	let seeker = getSeeker(url)
-	if (seeker) {
-		flashBlocker();
-		nanobar.go(30);
-		seeker.getVideos(url).then(res => {
-			console.log('getVideosResult:', res);
-			if (res) {
-				let ctrl = playVideo(res);
-				ctrl.player.onStarted = () => nanobar.go(100);
-				nanobar.go(60)
-			} else {
-				throw new Error('cannot play')
-			}
-		}).catch(e => {
-			console.error(e.stack)
-			nanobar.go(100);
-		});
+let handleDamoo = (vres, player, seeker, media) => {
+	let mode;
+	if (seeker.getAllDamoo) {
+		mode = 'all';
+	} else if (seeker.getDamooProgressive) {
+		mode = 'progressive';
 	}
+
+	if (!mode)
+		return;
+
+	let damoos = [];
+
+	(() => {
+		if (mode == 'all') {
+			return seeker.getAllDamoo(vres).then(res => {
+				damoos = res;
+			});
+		} else if (mode == 'progressive') {
+			return new Promise((fulfill, reject) => {
+				seeker.getDamooProgressive(vres, res => {
+					damoos = damoos.concat(res);
+					//console.log(`damoo: loaded n=${damoos.length}`);
+					fulfill();
+				})
+			});
+		}
+	})().then(() => {
+		//console.log(`damoo: loaded n=${damoos.length}`);
+
+		let video = player.video;
+		let updating;
+		let cur = 0;
+
+		let update = () => {
+			let time = video.currentTime+1.0;
+			if (cur < damoos.length && time > damoos[cur].time) {
+				for (; cur < damoos.length && damoos[cur].time <= time; cur++) {
+					let d = damoos[cur];
+					console.log('damoo: emit', `${Math.floor(d.time/60)}:${Math.floor(d.time%60)}`, d.text);
+					//emitter.emit({text: d.text, shadow: true, color: d.color});
+				}
+			}
+			updating = setTimeout(update, 1000);
+		};
+		let stopUpdate = () => {
+			if (updating) {
+				clearTimeout(updating);
+				updating = null;
+			}
+		}
+		let startUpdate = () => {
+			if (!updating)
+				update();
+		}
+
+		let resetCur = () => {
+			let time;
+			for (cur = 0; cur < damoos.length; cur++) {
+				if (damoos[cur].time > video.currentTime) {
+					time = damoos[cur].time;
+					break;
+				}
+			}
+			console.log(`damoo: cur=${cur}/${damoos.length} time=${time}`);
+		}
+
+		media.onSeek.push(() => {
+			//console.log('damoo: clear');
+			// emitter.clear();
+			resetCur();
+		})
+
+		player.onResume.push(() => {
+			// emitter.resume()
+			startUpdate();
+		});
+		player.onSuspend.push(() => {
+			// emitter.suspend()
+			stopUpdate();
+		});
+
+	});
+}
+
+let playUrl = url => {
+	return new Promise((fulfill, reject) => {
+		let seeker = getSeeker(url)
+		if (seeker) {
+			flashBlocker();
+			nanobar.go(30);
+			seeker.getVideos(url).then(res => {
+				console.log('getVideosResult:', res);
+				if (res) {
+					let ctrl = playVideo(res);
+					ctrl.player.onStarted.push(() => nanobar.go(100));
+					handleDamoo(res, ctrl.player, seeker, ctrl.media);
+					nanobar.go(60)
+					fulfill(ctrl);
+				} else {
+					throw new Error('getVideosResult: invalid')
+				}
+			}).catch(e => {
+				nanobar.go(100);
+				throw e;
+			});
+		} else {
+			throw new Error('seeker not found');
+		}
+	});
 }
 
 let cmd = {};
 
-cmd.fetchDiscontAudio = () => {
-	// at 209.667
-	let streams = new mediaSource.Streams([localhost+'discontaudio.flv']);
-	streams.probe().then(res => {
-		return streams.fetchMediaSegmentsByIndex(40,41);
-	}).then(() => {
-		return streams.fetchMediaSegmentsByIndex(41,42);
-	})
+cmd.youku = youku;
+cmd.tudou = tudou;
+cmd.bilibili = bilibili;
+
+cmd.testDanmuLayer = () => {
+	let danmu = createDamnuLayer(document.body);
 }
 
-cmd.playSingleFlv = (url, duration) => {
+cmd.fetchSingleFlvMediaSegments = (url, duration, indexStart, indexEnd) => {
+	let streams = new mediaSource.Streams({
+		urls: [localhost+url],
+		fakeDuration: duration,
+	});
+	streams.onProbeProgress = (stream, i) => {
+		if (i == 0) {
+			streams.fetchMediaSegmentsByIndex(indexStart, indexEnd);
+		}
+	};
+	streams.probeOneByOne();
+}
+
+cmd.playSingleFlv = (url, duration, pos) => {
 	cmd.ctrl = playVideo({
 		src:[
 			localhost+url,
 		],
 		duration,
 	});
+	if (pos) 
+		setTimeout(() => cmd.ctrl.player.video.currentTime = pos, 500);
 }
 
-cmd.playDiscontAudio = () => {
-	cmd.ctrl = playVideo({
-		src:[
-			localhost+'discontaudio.flv',
-		],
-	});
-	setTimeout(() => cmd.ctrl.player.video.currentTime = 51.0, 400);
-}
-
-cmd.testPlayerUI = () => {
-	cmd.ctrl = playVideo({
-		src:[
-			localhost+'projectindex-0.flv',
-			localhost+'projectindex-1.flv',
-			localhost+'projectindex-2.flv',
-			localhost+'projectindex-3.flv',
-		],
-		duration: 1420.0,
-	});
-}
-
-cmd.youku = youku;
-
-cmd.testGetVideos = url => {
+cmd.getVideos = url => {
 	let seeker = getSeeker(url);
 	if (!seeker) {
 		console.log('seeker not found');
@@ -141,15 +224,7 @@ cmd.testGetVideos = url => {
 	seeker.getVideos(url).then(res => console.log(res))
 }
 
-cmd.testYouku = () => {
-	youku.getVideos('http://v.youku.com/v_show/id_XMTU0NTYzOTIyMA==.html?from=1-1').then(res => console.log(res))
-	//youku.testEncryptFuncs()
-	//youku.showlog()
-}
-
-cmd.playUrl = url => {
-	playUrl(url)
-}
+cmd.playUrl = playUrl;
 
 cmd.testXhr = () => {
 	var xhr = new XMLHttpRequest();
@@ -184,15 +259,6 @@ cmd.testWriteFile = () => {
 			});
 		}, errfunc);
 	}, errfunc);
-}
-
-cmd.fetchMediacloseBugVideo= () => {
-	let url = 'http://www.bilibili.com/video/av1753789/';
-	getSeeker(url).getVideos(url).then(res => {
-		let streams = mediaSource.Streams({urls: res.src, fakeDuration: res.duration});
-		streams.probeFirst().then(() => {
-		});
-	})
 }
 
 cmd.testfetch = () => {
@@ -231,9 +297,9 @@ cmd.testInitSegment = () => {
 
 	let meta;
 	let fetchseg = seg => {
-		let headers = new Headers();
-		headers.append('Range', `bytes=${seg.offset}-${seg.offset+seg.size-1}`);
-		return fetch(localhost+'test-fragmented.mp4', {headers}).then(res=>res.arrayBuffer());
+		return fetch(localhost+'test-fragmented.mp4', {headers: {
+			Range: `bytes=${seg.offset}-${seg.offset+seg.size-1}`,
+		}}).then(res=>res.arrayBuffer());
 	}
 
 	fetch(localhost+'test-fragmented-manifest.json').then(res=>res.json()).then(res => {
@@ -290,7 +356,46 @@ cmd.testInitSegment = () => {
 	});
 }
 
-playUrl(location.href);
+cmd.testDamoo = () => {
+	let div = document.createElement('div');
 
-window.cmd = cmd;
+	div.innerHTML = `
+		<h1>Background</h1>
+	`;
+	div.style.height = '100%';
+	div.style.width = '100%';
+	div.style.background = '#eee';
+
+	document.body.appendChild(div);
+
+	let dm = new Damoo(div, 'test', 20);
+	dm.start();
+
+	dm.emit({text:'小小小的文字', color:'#000'});
+	dm.emit({text:'小小小的文字', color:'#000', fixed:true});
+	dm.emit({text:'稍微长一点的文字2333333333333333333', color:'#000', fixed:true});
+
+	let i = 0;
+	let timer = setInterval(() => {
+		i++;
+		if (i > 300) {
+			clearInterval(timer);
+			return;
+		}
+		let text = '哔哩哔哩';
+		for (let i = 0; i < 4; i++)
+			text = text+text;
+		dm.emit({
+			text,
+			color: '#f00', 
+			shadow: true,
+		});
+	}, 100);
+}
+
+if (location.href.substr(0,6) != 'chrome') {
+	playUrl(location.href);
+} else {
+	window.cmd = cmd;
+}
 
