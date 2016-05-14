@@ -44,11 +44,12 @@ let getDamooRaw = url => {
 			if (p[5] == 2)
 				return;
 			let pos;
-			switch (p[1]) {
+			switch (+p[1]) {
 				case 4: pos = 'bottom'; break;
 				case 5: pos = 'top'; break;
 			}
-			return {time: parseFloat(p[0]), pos, color:colorDec2Hex(p[3]), text: d.textContent};
+			//console.log(p[1], d.textContent);
+			return {time: parseFloat(p[0]), pos, color:colorDec2Hex(+p[3]), text: d.textContent};
 		}).filter(x => x).sort((a,b) => a.time-b.time);
 		return arr;
 	})
