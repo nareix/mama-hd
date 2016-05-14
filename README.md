@@ -54,6 +54,8 @@ you-get
 
 mux.js
 
+[Vczh]粉丝群 [咸鱼]Square 的建议
+
 @zsxsoft 的建议以及弹幕实现（https://github.com/zsxsoft/danmu-client）
 
 @jamesliu96 的弹幕实现（https://github.com/jamesliu96/Damoo）
