@@ -10,8 +10,6 @@
 
 [Chrome 商店](https://chrome.google.com/webstore/detail/mama-hd/hoihfdmeofbkbbjpieicemdhmjgfdihm?hl=zh-CN&gl=ID)
 
-[本地安装](https://github.com/nareix/mama-hd/raw/master/mama-hd.crx)（点击 Chrome 右上角选择设置->扩展程序->把刚下载的crx文件拖拽进去）
-
 要求 Chrome 版本大于 48
 
 打开一个视频页面，点击右上角的图标就可以播放了
@@ -42,6 +40,12 @@
 - [x] 支持土豆弹幕
 - [ ] 优化转码速度
 
+# ChangeLog
+
+0.91
+
+修复了各种播放不能/卡死的 BUG，实现了弹幕
+
 # 感谢
 
 妈妈计划（等测试稳定了求合并到主分支）
@@ -49,6 +53,8 @@
 you-get
 
 mux.js
+
+@zsxsoft 的建议以及弹幕实现（https://github.com/zsxsoft/danmu-client）
 
 @jamesliu96 的弹幕实现（https://github.com/jamesliu96/Damoo）
 
