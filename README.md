@@ -16,7 +16,7 @@
 
 打开一个视频页面，点击右上角的图标就可以播放了
 
- <kbd>⌘ + Enter</kbd> 全屏 / <kbd>↑ ↓</kbd> 音量 / <kbd>← →</kbd> 快进快退 / <kbd>M</kbd> 静音 / <kbd>Space</kbd> 暂停
+ <kbd>⌘ + Enter</kbd> 全屏 / <kbd>↑ ↓</kbd> 音量 / <kbd>← →</kbd> 快进快退 / <kbd>M</kbd> 静音 / <kbd>Space</kbd> 暂停 / <kbd>D</kbd> 打开弹幕
 
 非 Flv 视频建议使用[妈妈计划](https://github.com/zythum/mama2/)
 
@@ -28,6 +28,8 @@
 
 **经过实测，平均转码 10s 的视频只需要 20~40ms 左右（i5 2.9G），CPU 占用与播放相比可以忽略。**
 
+弹幕用 canvas + css transition 实现，CPU 占用同样很低。
+
 # 特性
 
 - [x] 支持 Bilibili
@@ -36,8 +38,8 @@
 - [x] 优化进度条拖动
 - [ ] 支持 mp4demux（少量 B 站视频和搜狐视频是分段 mp4）
 - [ ] 支持视频下载
-- [ ] 支持 Bilibili 弹幕
-- [ ] 支持土豆弹幕
+- [x] 支持 Bilibili 弹幕
+- [x] 支持土豆弹幕
 - [ ] 优化转码速度
 
 # 感谢
@@ -47,6 +49,8 @@
 you-get
 
 mux.js
+
+@jamesliu96 的弹幕实现（https://github.com/jamesliu96/Damoo）
 
 ## License
 
