@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Author</key>
+	<string>nareix</string>
+	<key>Builder Version</key>
+	<string>10600.1.25</string>
+	<key>CFBundleDisplayName</key>
+	<string>mama-hd</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.nareix.mama-hd</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>Chrome</key>
+	<dict>
+		<key>Global Page</key>
+		<string>bg.html</string>
+		<key>Toolbar Items</key>
+		<array>
+			<dict>
+				<key>Command</key>
+				<string>MAMA-HD</string>
+				<key>Identifier</key>
+				<string>MAMA-HD</string>
+				<key>Image</key>
+				<string>icon128.png</string>
+				<key>Include By Default</key>
+				<true/>
+				<key>Label</key>
+				<string>MAMA-HD</string>
+				<key>Palette Label</key>
+				<string>MAMA-HD</string>
+				<key>Tool Tip</key>
+				<string>MAMA-HD</string>
+			</dict>
+		</array>
+	</dict>
+	<key>Content</key>
+	<dict>
+		<key>Scripts</key>
+		<dict>
+			<key>Start</key>
+			<array>
+				<string>script.js</string>
+			</array>
+		</dict>
+	</dict>
+	<key>Description</key>
+	<string>妈妈再也不用担心我的 Macbook 发热计划之 1080P</string>
+	<key>DeveloperIdentifier</key>
+	<string></string>
+	<key>ExtensionInfoDictionaryVersion</key>
+	<string>1.0</string>
+	<key>Permissions</key>
+	<dict>
+		<key>Website Access</key>
+		<dict>
+			<key>Include Secure Pages</key>
+			<true/>
+			<key>Level</key>
+			<string>All</string>
+		</dict>
+	</dict>
+	<key>Website</key>
+	<string>http://github.com/nareix/mama-hd/</string>
+</dict>
+</plist>

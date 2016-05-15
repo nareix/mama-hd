@@ -16,7 +16,6 @@
 // [OK] video reset problem: http://www.bilibili.com/video/av314/
 // [OK] video stuck problem: http://www.tudou.com/albumplay/-3O0GyT_JkQ/Az5cnjgva4k.html 16:11
 // [OK] InitSegment invalid: http://www.bilibili.com/video/av1753789 
-// discontinous audio problem http://www.tudou.com/albumplay/-3O0GyT_JkQ/sXKDvI_8ois.html at 04:00
 // EOF error at index 67 http://www.bilibili.com/video/av4593775/
 
 // Test needed for safari: 
@@ -36,7 +35,6 @@ let createPlayer = require('./player');
 let flashBlocker = require('./flashBlocker');
 let flvdemux = require('./flvdemux');
 let FastDamoo = require('./damoo');
-//let Damoo = require('./damoo');
 
 let nanobar = new Nanobar();
 

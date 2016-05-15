@@ -1,6 +1,6 @@
 {
   "name": "MAMA-HD",
-  "version": "0.91",
+  "version": "0.92",
   "manifest_version": 2,
 	"minimum_chrome_version": "48",
   "browser_action": {
