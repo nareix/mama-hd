@@ -9,7 +9,7 @@
 var Damoo = function({container, fontSize, fontFamily}) {
 	fontFamily = fontFamily || 'Arial';
 	this.canvas = new Canvas(container, fontSize, fontFamily);
-	this.thread = new Thread(() => Math.floor(container.offsetHeight/fontSize-2));
+	this.thread = new Thread(() => Math.floor(container.offsetHeight/fontSize-3));
 };
 
 var _preload = function(d, f) {
@@ -48,7 +48,6 @@ Damoo.prototype.emit = function(d) {
 		d = { text: d };
 	}
 	var cvs = _preload(d, this.canvas.font);
-	var defaultTime = 10;
 
 	var fixed;
 	var index;
@@ -61,13 +60,12 @@ Damoo.prototype.emit = function(d) {
 	} else {
 		index = this.thread.allocIndex();
 	}
-	console.log('damoo:', d.pos, index, d.text);
 
 	this.thread.push({
 		canvas: cvs,
 		fixed, index,
 		pos: d.pos,
-		displaytime: d.time || 10,
+		displaytime: d.time || (fixed ? 5 : 10),
 		timestart: this.curtime(),
 		y: this.canvas.font.size*index,
 	});
