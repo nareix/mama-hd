@@ -16,6 +16,7 @@
 // [OK] video reset problem: http://www.bilibili.com/video/av314/
 // [OK] video stuck problem: http://www.tudou.com/albumplay/-3O0GyT_JkQ/Az5cnjgva4k.html 16:11
 // [OK] InitSegment invalid: http://www.bilibili.com/video/av1753789 
+// discontinous audio problem http://www.tudou.com/albumplay/-3O0GyT_JkQ/sXKDvI_8ois.html at 04:00
 // EOF error at index 67 http://www.bilibili.com/video/av4593775/
 
 // Test needed for safari: 
@@ -34,7 +35,8 @@ let tudou = require('./tudou');
 let createPlayer = require('./player');
 let flashBlocker = require('./flashBlocker');
 let flvdemux = require('./flvdemux');
-let Damoo = require('./fastdamoo');
+let FastDamoo = require('./damoo');
+//let Damoo = require('./damoo');
 
 let nanobar = new Nanobar();
 
@@ -158,7 +160,7 @@ let handleDamoo = (vres, player, seeker, media) => {
 			if (cur < damoos.length && time > damoos[cur].time) {
 				for (; cur < damoos.length && damoos[cur].time <= time; cur++) {
 					let d = damoos[cur];
-					console.log('damoo: emit', `${Math.floor(d.time/60)}:${Math.floor(d.time%60)}`, d.text);
+					//console.log('damoo: emit', `${Math.floor(d.time/60)}:${Math.floor(d.time%60)}`, d.text);
 					emitter.emit({text: d.text, pos: d.pos, shadow: {color: '#000'}, color: d.color});
 				}
 			}
@@ -187,31 +189,30 @@ let handleDamoo = (vres, player, seeker, media) => {
 		}
 
 		media.onSeek.push(() => {
-			//console.log('damoo: clear');
 			emitter.clear();
 			resetCur();
 		})
 
 		player.onResume.push(() => {
 			if (emitter == null) {
-	 			emitter = new Damoo({container:player.damoo, fontSize:25});
+	 			emitter = new FastDamoo({container:player.damoo, fontSize:20});
+				let setDamooOpts = () => {
+					player.damoo.style.opacity = player.damooOpacity;
+					if (player.damooEnabled) {
+						emitter.show();
+					} else {
+						emitter.hide();
+					}
+				}
+				player.onDamooOptsChange.push(() => setDamooOpts());
+				setDamooOpts();
 			}
-			player.damoo.style.opacity = player.damooOpacity;
+			emitter.synctime(video.currentTime);
 			emitter.resume()
 			startUpdate();
-
-			let setDamooOpts = () => {
-				player.damoo.style.opacity = player.damooOpacity;
-				if (player.damooEnabled) {
-					emitter.show();
-				} else {
-					emitter.hide();
-				}
-			}
-			player.onDamooOptsChange.push(() => setDamooOpts());
-			setDamooOpts();
 		});
 		player.onSuspend.push(() => {
+			emitter.synctime(video.currentTime);
 			emitter.suspend()
 			stopUpdate();
 		});
@@ -560,10 +561,32 @@ cmd.testDamoo = () => {
 	div.style.background = '#eee';
 	document.body.appendChild(div);
 
-	let dm = new Damoo({container:div, fontSize:20});
+	let dm = new FastDamoo({container:div, fontSize:20});
+	dm.show();
+	dm.resume();
 	dm.emit({text:'小小小的文字', color:'#000'});
 	dm.emit({text:'小小小的文字', color:'#000', pos:'bottom'});
 	dm.emit({text:'稍微长一点的文字2333333333333333333', color:'#000', pos:'top'});
+
+	document.body.addEventListener('keydown', (e) => {
+		switch (e.code) {
+			case "KeyR": {
+				dm.resume();
+			} break;
+
+			case "KeyP": {
+				dm.suspend();
+			} break;
+
+			case "KeyS": {
+				dm.show();
+			} break;
+
+			case "KeyH": {
+				dm.hide();
+			} break;
+		}
+	});
 
 	let i = 0;
 	let timer = setInterval(() => {
@@ -579,7 +602,7 @@ cmd.testDamoo = () => {
 			text,
 			color: '#f00', 
 		});
-	}, 100);
+	}, 10);
 }
 //cmd.testDamoo()
 

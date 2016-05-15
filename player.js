@@ -15,6 +15,7 @@ module.exports = () => {
 		</svg>
 	`;
 	toolbar.style.display = 'none';
+	document.body.style.background = '#000';
 
 	div.appendChild(toolbar);
 	div.appendChild(video);
