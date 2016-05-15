@@ -9,7 +9,7 @@
 var Damoo = function({container, fontSize, fontFamily}) {
 	fontFamily = fontFamily || 'Arial';
 	this.canvas = new Canvas(container, fontSize, fontFamily);
-	this.thread = new Thread(() => Math.floor(container.offsetHeight/fontSize-4));
+	this.thread = new Thread(() => Math.floor(container.offsetHeight/fontSize-2));
 };
 
 var _preload = function(d, f) {
@@ -49,13 +49,27 @@ Damoo.prototype.emit = function(d) {
 	}
 	var cvs = _preload(d, this.canvas.font);
 	var defaultTime = 10;
+
+	var fixed;
+	var index;
+	if (d.pos == 'top') {
+		fixed = true;
+		index = this.thread.allocFixedIndex(1);
+	} else if (d.pos == 'bottom') {
+		fixed = true;
+		index = this.thread.allocFixedIndex(-1);
+	} else {
+		index = this.thread.allocIndex();
+	}
+	console.log('damoo:', d.pos, index, d.text);
+
 	this.thread.push({
 		canvas: cvs,
+		fixed, index,
 		pos: d.pos,
-		index: this.thread.index,
 		displaytime: d.time || 10,
 		timestart: this.curtime(),
-		y: this.canvas.font.size * this.thread.index,
+		y: this.canvas.font.size*index,
 	});
 	return this;
 };
@@ -64,22 +78,21 @@ Damoo.prototype.render = function() {
 	var time = this.curtime();
 
 	this.canvas.clear();
-	for (var i = 0; i < this.thread.pool.length; i++) {
-		var d = this.thread.get(i);
+	this.thread.forEach(d => {
 		var elapsed = time-d.timestart;
 		if (elapsed > d.displaytime) {
-			this.thread.remove(i);
-			continue;
+			this.thread.remove(d);
+			return;
 		}
 		var x;
-		if (d.pos == 'bottom' || d.pos == 'top') {
+		if (d.fixed) {
 			x = (this.canvas.width-d.canvas.width)/2;
 		} else {
 			var w = this.canvas.width+d.canvas.width;
 			x = this.canvas.width-w*(elapsed/d.displaytime);
 		}
 		this.canvas.context.drawImage(d.canvas, x, d.y);
-	}
+	});
 	this._afid = _RAF(() => this.render());
 }
 
@@ -167,34 +180,62 @@ Font.prototype.toString = function() {
 };
 
 var Thread = function(rows) {
-	this.index = 0;
 	this.rows = rows;
-	this.pool = [];
+	this.empty();
 };
 
-Thread.prototype.push = function(d) {
-	this.index++;
+Thread.prototype.allocFixedIndex = function(inc) {
+	var n = this.rows();
+	if (inc > 0) {
+		if (this.fixedTop > n) {
+			this.fixedTop = 0;
+		}
+		return this.fixedTop++;
+	} else {
+		if (this.fixedBottom > n || this.fixedBottom < 0) {
+			this.fixedBottom = n;
+		}
+		return this.fixedBottom--;
+	}
+};
+
+Thread.prototype.allocIndex = function() {
 	if (this.index >= this.rows()) {
 		this.index = 0;
 	}
-	this.pool.push(d);
+	return this.index++;
 };
 
-Thread.prototype.get = function(d) {
-	return this.pool[d];
+Thread.prototype.push = function(d) {
+	this.pool.add(d);
+};
+
+Thread.prototype.forEach = function(fn) {
+	this.pool.forEach(fn);
 };
 
 Thread.prototype.remove = function(d) {
-	var i = this.get(d).index;
-	if (this.index > i) {
-		this.index = i;
+	if (d.pos == 'top') {
+		if (d.index < this.fixedTop) {
+			this.fixedTop = d.index;
+		}
+	} else if (d.pos == 'bottom') {
+		if (d.index > this.fixedBottom) {
+			this.fixedBottom = d.index;
+		}
+	} else {
+		if (d.index < this.index) {
+			this.index = d.index;
+		}
 	}
-	this.pool.splice(d, 1);
+	this.pool.delete(d);
 };
 
 Thread.prototype.empty = function() {
 	this.index = 0;
-	this.pool = [];
+	this.fixedTop = 0;
+	this.fixedBottom = this.rows();
+	this.pool = new Set();
 };
 
 module.exports = Damoo;
