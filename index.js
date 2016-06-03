@@ -17,6 +17,7 @@
 // [OK] video stuck problem: http://www.tudou.com/albumplay/-3O0GyT_JkQ/Az5cnjgva4k.html 16:11
 // [OK] InitSegment invalid: http://www.bilibili.com/video/av1753789 
 // EOF error at index 67 http://www.bilibili.com/video/av4593775/
+// EOF error at index 166,168 http://www.tudou.com/albumplay/92J2xqpSxWY/m4dBe7EG-7Q.html
 
 // Test needed for safari: 
 //    xhr cross origin, change referer header, pass arraybuffer efficiency,
