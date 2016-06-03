@@ -9,7 +9,7 @@ exports.getVideos = (url) => {
 	}).then(function(cid) {
 		if (!cid)
 			return;
-		return fetch("http://interface.bilibili.com/playurl?appkey=8e9fc618fbd41e28&cid="+cid)
+		return fetch("http://interface.bilibili.com/playurl?appkey=f3bb208b3d081dc8&cid="+cid)
 		.then(res => res.text()).then(res => {
 			let parser = new DOMParser();
 			let doc = parser.parseFromString(res, 'text/xml');
