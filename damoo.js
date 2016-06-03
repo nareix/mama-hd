@@ -9,7 +9,7 @@
 var Damoo = function({container, fontSize, fontFamily}) {
 	fontFamily = fontFamily || 'Arial';
 	this.canvas = new Canvas(container, fontSize, fontFamily);
-	this.thread = new Thread(() => Math.floor(container.offsetHeight/fontSize-3));
+	this.thread = new Thread(() => Math.floor(container.offsetHeight/fontSize-4));
 };
 
 var _preload = function(d, f) {
@@ -44,6 +44,9 @@ Damoo.prototype.curtime = function() {
 }
 
 Damoo.prototype.emit = function(d) {
+	if (!this.visible)
+		return;
+
 	if ("string" === typeof d) {
 		d = { text: d };
 	}
