@@ -62,6 +62,8 @@ mux.js
 
 @jamesliu96 的弹幕实现（https://github.com/jamesliu96/Damoo）
 
+@cnbeining 的 B 站新解析（2016-8）
+
 ## License
 
 MIT
