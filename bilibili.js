@@ -1,4 +1,10 @@
 
+var md5 = require('blueimp-md5');
+const SECRETKEY_MINILOADER = '1c15888dc316e05a15fdd0a02ed6584f';
+let interfaceUrl = (cid, ts) => `cid=${cid}&player=1&ts=${ts}`;
+let calcSign = (cid, ts) => md5(`${interfaceUrl(cid,ts)}${SECRETKEY_MINILOADER}`);
+
+exports.calcSign = calcSign;
 exports.testUrl = url => url.match('bilibili.com/')
 
 exports.getVideos = (url) => {
@@ -9,7 +15,9 @@ exports.getVideos = (url) => {
 	}).then(function(cid) {
 		if (!cid)
 			return;
-		return fetch("http://interface.bilibili.com/playurl?appkey=f3bb208b3d081dc8&cid="+cid)
+
+		let ts = Math.ceil(Date.now()/1000)
+		return fetch(`http://interface.bilibili.com/playurl?${interfaceUrl(cid,ts)}&sign=${calcSign(cid,ts)}`)
 		.then(res => res.text()).then(res => {
 			let parser = new DOMParser();
 			let doc = parser.parseFromString(res, 'text/xml');
