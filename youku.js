@@ -111,6 +111,12 @@ var getVideosByUrl = exports.getVideosByUrl = function (url) {
 		var parser = new DOMParser();
 		var doc = parser.parseFromString(res, 'text/html');
 		var scripts = Array.prototype.slice.call(doc.querySelectorAll('script')).map(script => script.textContent);
+		var videoId = scripts.filter(x => x.match(/videoId:/));
+		if (videoId) {
+			videoId = videoId[0].match(/videoId: *"(\d+)"/);
+			if (videoId)
+				return getVideosByVideoId(videoId[1]);
+		}
 		var videoId = scripts.filter(x => x.match(/var videoId =/));
 		if (videoId) {
 			videoId = videoId[0].match(/videoId = '(\d+)'/);
