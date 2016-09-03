@@ -2,7 +2,7 @@
 
 『[妈妈计划](https://github.com/zythum/mama2/)』用于解决在看视频网站时 MacBook 发(guang)热(gao)严(tai)重(duo)的问题，使用 video 来替换原来的 flash 播放器（对 Windows 下的 Flash 也有用）
 
-（B 站由于视频解析方式变更正在调整中）
+**2016 下半年 Google 宣布强制关闭 Flash，注意！是特么是强制关闭！只允许十个网站使用！坐等 B 站倒闭！啊哈哈哈哈哈哈！**
 
 本分支计划实现了用原生 video 实时转码播放 Bilibili/土豆/优酷 的 1080P flv 格式视频：
 
