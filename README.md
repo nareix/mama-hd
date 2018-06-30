@@ -2,8 +2,6 @@
 
 『[妈妈计划](https://github.com/zythum/mama2/)』用于解决在看视频网站时 MacBook 发(guang)热(gao)严(tai)重(duo)的问题，使用 video 来替换原来的 flash 播放器（对 Windows 下的 Flash 也有用）
 
-**B 站已经支持了 MediaSource 播放 FLV 视频，表扬一个！**
-
 本分支计划实现了用原生 video 实时转码播放 Bilibili/土豆/优酷 的 1080P flv 格式视频：
 
 ![](https://raw.githubusercontent.com/nareix/mama-hd/master/screenshot.png)
@@ -22,13 +20,15 @@
 
 # 原理
 
-自从用了妈妈计划幸福感提升了很多，可惜不支持 1080P，这是因为国内的大多数视频网站对于 1080P 的片源仍然采用分段 flv 来存放，默认方法没法播放。偶尔忍不住高清诱惑打开 flash 看一会儿，MacBook 又开始发热了！
-
-妈妈说：w3c 标准里面有一个东西叫做 Media Source Extensions，已经被 Chrome 支持了，它能播放 fmp4（Fragmented MP4），这种 mp4 可以随意取一个片段播放，不需要全局的索引信息，dash.js 就是基于它做的视频直播。而 Chrome 里也有速度很快的二进制操作（Uint8Array，底层是零拷贝），所以只要把 flv 在浏览器里面实时转换成 fmp4 就可以了。
+使用 Media Source Extensions 播放 fmp4（Fragmented MP4），这种 mp4 可以随意取一个片段播放，不需要全局的索引信息，dash.js 就是基于它做的视频直播。而 Chrome 里也有速度很快的二进制操作（Uint8Array，底层是零拷贝），所以只要把 flv 在浏览器里面实时转换成 fmp4 就可以了。
 
 **经过实测，平均转码 10s 的视频只需要 20~40ms 左右（i5 2.9G），CPU 占用与播放相比可以忽略。**
 
 弹幕用 canvas 实现，CPU 占用同样很低。
+
+# 使用同样原理的项目
+
+https://github.com/Bilibili/flv.js
 
 # 特性
 
